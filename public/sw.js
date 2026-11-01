@@ -1,7 +1,8 @@
 // Guarda la pantalla de la app para que abra rápido; los precios siempre se
 // piden al servidor (nunca se muestran precios guardados como si fueran nuevos).
 // También recibe las notificaciones push del monitoreo.
-const VERSION = 'mp-v12';
+// Debe ser `mp-` + la versión más reciente de public/novedades.js.
+const VERSION = 'mp-2.0';
 const ARCHIVOS = [
   './',
   'index.html',
@@ -15,6 +16,7 @@ const ARCHIVOS = [
   'estado.js',
   'inventario.js',
   'lista.js',
+  'novedades.js',
   'optimizar.js',
   'pedido.js',
   'proveedores.js',

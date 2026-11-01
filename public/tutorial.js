@@ -166,10 +166,15 @@ function abrir() {
   document.documentElement.style.overflow = 'hidden';
 }
 
+let alCerrar = null;
+
 function cerrar() {
   $('#tutorial').hidden = true;
   document.documentElement.style.overflow = '';
   guardado(CLAVE_VISTO, true);
+  const siguiente = alCerrar;
+  alCerrar = null;
+  siguiente?.();
 }
 
 /** Abre el tutorial desde el botón «Cómo funciona». */
@@ -178,9 +183,11 @@ export function abrirTutorial() {
   abrir();
 }
 
-/** Lo abre solo si es la primera vez que entra. */
-export function iniciarTutorial() {
-  if (guardado(CLAVE_VISTO)) return;
+/** Lo abre solo si es la primera vez que entra; `despues` corre al cerrarlo
+ *  (o enseguida, si ya lo había visto). */
+export function iniciarTutorial(despues) {
+  if (guardado(CLAVE_VISTO)) return despues?.();
+  alCerrar = despues || null;
   abrir();
 }
 

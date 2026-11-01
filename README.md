@@ -105,6 +105,14 @@ Diferencias con el servidor propio: cada búsqueda tiene 10 segundos (cada tiend
 4. En **Settings → Networking** genera un dominio público.
 5. Abre ese enlace en el teléfono, entra con la contraseña y en el menú del navegador elige **Agregar a pantalla de inicio** (Android) o **Compartir → Agregar a inicio** (iPhone).
 
+## Publicar una actualización
+
+Cada versión queda marcada en la app («Versión 2.0 · Novedades» al pie de la página). La primera vez que alguien entra en un dispositivo después de una actualización se abre **Nuevas actualizaciones**, con el **antes y el ahora** de cada función. Para publicar una:
+
+1. En `public/novedades.js`, agrega la versión **al principio** de `VERSIONES`: número, fecha, título y sus cambios (`titulo`, `antes`, `ahora` y, si quieres un botón «Probarlo», `donde` con la vista: `proveedores`, `pedido`, `ventas`, `ajustes`, `lista`, `catalogo`).
+2. En `public/sw.js`, cambia `VERSION` a `mp-<número>` (`npm test` falla si se te olvida).
+3. Publica como siempre. Si la app estaba abierta, aparece «Hay una versión nueva · Actualizar».
+
 ## Si una tienda deja de funcionar
 
 Cada tienda está en su propio archivo en `src/tiendas/`. Si una cambia su página, solo falla esa: la app muestra el error en su pastilla y las demás siguen funcionando.

@@ -6,6 +6,7 @@ import { ajustes, fusionarServidor, registrar } from './datos.js';
 import { configurarEscaner } from './escaner.js';
 import { abrirEstado, configurarEstado } from './estado.js';
 import { abrirLista, analizarLista, configurarLista, propuestaVieja } from './lista.js';
+import { configurarNovedades, iniciarNovedades } from './novedades.js';
 import { agregarAlPedido, configurarPedido, pintarPedido } from './pedido.js';
 import { abrirProveedores, configurarProveedores } from './proveedores.js';
 import { cerrarFicha, fijarUltimo, pintarResultados, refrescar, ultimo } from './resultados.js';
@@ -186,6 +187,7 @@ configurarProveedores();
 configurarAjustes();
 configurarEstado();
 configurarEscaner();
+configurarNovedades((vista) => (vista === 'ajustes' ? abrirAjustes() : mostrar(vista)));
 aplicarApariencia();
 
 async function iniciar() {
@@ -194,7 +196,9 @@ async function iniciar() {
   mostrar('buscar');
   pintarRecientes();
   pintarSugerencias();
-  iniciarTutorial();
+  // Primera vez en el dispositivo: tutorial; después (o si ya lo vio), las
+  // novedades de la versión que este dispositivo todavía no ha visto.
+  iniciarTutorial(() => iniciarNovedades((vista) => (vista === 'ajustes' ? abrirAjustes() : mostrar(vista))));
   ultimaSync = Date.now();
   const [r] = await Promise.all([sincronizar(), catalogoTiendas()]);
   if (r.ajustesCambiaron) aplicarApariencia();
@@ -206,7 +210,17 @@ async function iniciar() {
 }
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Si ya había una versión instalada y entra otra con la app abierta, se
+  // ofrece recargar; al recargar se abren las novedades.
+  const habiaVersion = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (habiaVersion) $('#nueva-version').hidden = false;
+  });
+  $('#nueva-version-recargar').addEventListener('click', () => location.reload());
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    // Buscar versión nueva al volver a la app (las PWA instaladas pueden pasar días abiertas).
+    document.addEventListener('visibilitychange', () => !document.hidden && reg.update().catch(() => {}));
+  }).catch(() => {});
   // Al tocar una notificación con la app abierta, el service worker pide la búsqueda.
   navigator.serviceWorker.addEventListener('message', (e) => {
     if (e.data?.tipo === 'abrir' && e.data.q) {

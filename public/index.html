@@ -206,6 +206,26 @@
 
   <p id="aviso-flotante" class="aviso-flotante" role="status" hidden></p>
 
+  <!-- Una versión nueva se instaló mientras la app estaba abierta -->
+  <div id="nueva-version" class="nueva-version" role="status" hidden>
+    <span>Hay una versión nueva de la app.</span>
+    <button id="nueva-version-recargar" class="mini activo" type="button">Actualizar</button>
+  </div>
+
+  <!-- Novedades -->
+  <dialog id="novedades" class="ficha novedades" aria-label="Nuevas actualizaciones">
+    <button id="novedades-cerrar" class="tutorial-cerrar" type="button" aria-label="Cerrar">
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <path d="M3 3l10 10M13 3L3 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+      </svg>
+    </button>
+    <div id="novedades-cuerpo" class="ficha-cuerpo"></div>
+  </dialog>
+
+  <footer class="pie">
+    <button id="ver-novedades" class="enlace-boton pie-version" type="button">Novedades</button>
+  </footer>
+
   <!-- Escáner de código de barras -->
   <div id="escaner" class="escaner" hidden role="dialog" aria-modal="true" aria-label="Escanear código de barras">
     <video id="escaner-video" playsinline muted></video>
