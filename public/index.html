@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="es-CO">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#eef0f3">
+  <meta name="description" content="Compara el precio de un producto en Bevgo, Dislicores, Éxito, Makro, Olímpica y Agua Pure.">
+  <title>Mejor Precio</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="barra">
+    <a class="marca" href="./" id="ir-buscar" aria-label="Mejor Precio: ir a buscar">
+      <img src="icons/icon-192.png" alt="" width="28" height="28">
+      <div>
+        <h1>Mejor Precio</h1>
+        <p>Bevgo · Dislicores · Éxito · Makro · Olímpica · Agua Pure</p>
+      </div>
+    </a>
+    <div class="acciones">
+      <button id="abrir-tutorial" class="boton-texto" type="button">Cómo funciona</button>
+      <button id="abrir-lista" class="boton-texto" type="button" hidden>Mi lista</button>
+      <button id="abrir-catalogo" class="boton-texto" type="button" hidden>Catálogo</button>
+      <button id="abrir-ajustes" class="boton-texto" type="button" hidden>Ajustes</button>
+      <button id="salir" class="boton-texto" type="button" hidden>Salir</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Entrada -->
+    <section id="vista-entrar" class="tarjeta entrar" hidden>
+      <div class="marca-grande">
+        <img src="icons/icon-192.png" alt="" width="46" height="46">
+        <div>
+          <h2>Mejor Precio</h2>
+          <p>Bevgo · Dislicores · Éxito · Makro · Olímpica · Agua Pure</p>
+        </div>
+      </div>
+      <form id="form-entrar" autocomplete="on">
+        <label for="clave">Contraseña</label>
+        <input id="clave" name="clave" type="password" autocomplete="current-password" required>
+        <button class="boton" type="submit">Entrar</button>
+        <p id="error-entrar" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <!-- Búsqueda -->
+    <section id="vista-buscar" hidden>
+      <form id="form-buscar" class="buscador" role="search">
+        <input id="q" name="q" type="search" inputmode="search" enterkeyhint="search"
+               placeholder="Ej: aguardiente antioqueño 750" autocomplete="off" minlength="2" maxlength="80" required>
+        <button id="escanear" class="boton-texto boton-escanear" type="button" hidden aria-label="Escanear código de barras">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <button class="boton" type="submit">Buscar</button>
+      </form>
+      <p class="ayuda">Incluye el tamaño (750, 375, 1000…) para comparar la misma presentación, o escribe el código de barras (EAN) para encontrar el producto exacto. Cada búsqueda alimenta tu historial: con el tiempo aparecen los avisos de precio.</p>
+
+      <div id="recientes" class="recientes"></div>
+
+      <div id="estado" class="estado" aria-live="polite"></div>
+      <div id="resultados"></div>
+    </section>
+
+    <!-- Mi lista -->
+    <section id="vista-lista" hidden>
+      <h2>Mi lista</h2>
+      <p class="ayuda">Agrega los productos que compras o revendes seguido. El servidor los revisa solo cada 6 horas, aunque no abras la app, y guarda su historial y sus avisos. La propuesta del día te dice en qué tienda sale más barato cada uno.</p>
+      <form id="form-lista" class="buscador" role="search">
+        <input id="lista-q" name="q" type="search" inputmode="search" enterkeyhint="add"
+               placeholder="Ej: aguardiente antioqueño 750" autocomplete="off" minlength="2" maxlength="80" required>
+        <button class="boton" type="submit">Agregar</button>
+      </form>
+      <div id="lista-items" class="lista-items"></div>
+      <button id="lista-analizar" class="boton" type="button">Analizar ahora</button>
+      <div id="lista-estado" class="estado" aria-live="polite"></div>
+      <div id="propuesta"></div>
+    </section>
+
+    <!-- Catálogo de reventa -->
+    <section id="vista-catalogo" hidden>
+      <h2>Catálogo</h2>
+      <p class="ayuda">Los productos de Mi lista que revendes. Con el costo de compra más barato de hoy y tu regla de precio, la app te dice a cuánto venderlos y cuáles pausar porque ninguna tienda los tiene.</p>
+      <div id="cat-resumen" class="cat-resumen"></div>
+      <div class="cat-acciones">
+        <button id="cat-actualizar" class="boton-texto" type="button">Actualizar precios</button>
+        <button id="cat-aplicar" class="boton" type="button">Aplicar sugeridos</button>
+        <button id="cat-exportar" class="boton-texto" type="button">Exportar CSV</button>
+      </div>
+      <div id="cat-estado" class="estado" aria-live="polite"></div>
+      <div id="cat-items" class="cat-items"></div>
+      <p class="nota">El CSV trae tu precio, el sugerido y el estado (activo o pausar) para subirlo a tu tienda. Los productos se revisan solos cada 6 horas.</p>
+    </section>
+  </main>
+
+  <!-- Escáner de código de barras -->
+  <div id="escaner" class="escaner" hidden role="dialog" aria-modal="true" aria-label="Escanear código de barras">
+    <video id="escaner-video" playsinline muted></video>
+    <div class="escaner-marco" aria-hidden="true"></div>
+    <p id="escaner-texto" class="escaner-texto">Apunta al código de barras de la botella</p>
+    <button id="escaner-cerrar" class="boton" type="button">Cancelar</button>
+  </div>
+
+  <!-- Tutorial -->
+  <div id="tutorial" class="tutorial" hidden role="dialog" aria-modal="true" aria-labelledby="tu-titulo">
+    <div class="tutorial-scrim" data-cerrar-tutorial></div>
+    <div class="tutorial-caja">
+      <button class="tutorial-cerrar" type="button" data-cerrar-tutorial aria-label="Cerrar">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <path d="M3 3l10 10M13 3L3 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+      </button>
+      <div class="tutorial-demo" id="tu-demo"></div>
+      <div class="tutorial-texto">
+        <p class="tutorial-paso" id="tu-paso"></p>
+        <h2 id="tu-titulo"></h2>
+        <p class="tutorial-cuerpo" id="tu-cuerpo"></p>
+        <div class="tutorial-dots" id="tu-dots"></div>
+        <div class="tutorial-acciones">
+          <button id="tu-atras" class="boton-texto" type="button">Atrás</button>
+          <button id="tu-saltar" class="boton-texto" type="button">Saltar</button>
+          <button id="tu-siguiente" class="boton" type="button">Siguiente</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ajustes -->
+  <section id="vista-ajustes" class="tarjeta" hidden>
+    <div class="ajustes-cabeza">
+      <h2>Ajustes</h2>
+      <button id="aj-volver" class="boton-texto" type="button">Volver</button>
+    </div>
+
+    <fieldset class="aj-seccion">
+      <legend>Margen neto</legend>
+      <p class="ayuda">Valores iniciales de la calculadora de cada producto. Puedes cambiarlos en cada fila.</p>
+      <div class="rejilla">
+        <label>Comisión de pago (%)
+          <input id="aj-comision-pct" type="number" inputmode="decimal" min="0" step="0.5">
+        </label>
+        <label>Comisión fija ($)
+          <input id="aj-comision-fija" type="number" inputmode="numeric" min="0" step="100">
+        </label>
+        <label>Impuestos (% sobre la venta)
+          <input id="aj-iva" type="number" inputmode="decimal" min="0" step="0.5">
+        </label>
+        <label>Envío o recogida por defecto ($)
+          <input id="aj-envio" type="number" inputmode="numeric" min="0" step="500">
+        </label>
+        <label>Margen objetivo del catálogo (%)
+          <input id="aj-objetivo" type="number" inputmode="decimal" min="0" max="90" step="1">
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset class="aj-seccion">
+      <legend>Logística</legend>
+      <p class="ayuda">Suma lo que te cuesta ir a buscar el producto. Pega el enlace de Google Maps de cada tienda (o escribe <code>lat, lng</code>). Las tiendas sin coordenadas se cuentan con costo cero.</p>
+      <label class="opciones">
+        <input type="checkbox" id="aj-log-activo">
+        Sumar el costo de traslado al comparar
+      </label>
+      <div class="rejilla">
+        <label>Tu ubicación
+          <input id="aj-log-origen" placeholder="Enlace de Google Maps o 9.4, -75.3">
+        </label>
+        <label>Costo por kilómetro ($)
+          <input id="aj-log-porkm" type="number" inputmode="numeric" min="0" step="100">
+        </label>
+      </div>
+      <button id="aj-log-mi" class="boton-texto" type="button">Usar mi ubicación</button>
+      <div id="aj-log-tiendas" class="rejilla"></div>
+      <p id="aj-log-resumen" class="ayuda"></p>
+    </fieldset>
+
+    <fieldset class="aj-seccion">
+      <legend>Puntos y cashback</legend>
+      <p class="ayuda">Porcentaje que cada tienda te devuelve en puntos o cashback. Se suma al margen.</p>
+      <div id="aj-cashback" class="rejilla"></div>
+    </fieldset>
+
+    <div class="ajustes-acciones">
+      <button id="aj-guardar" class="boton" type="button">Guardar</button>
+      <p id="aj-listo" class="ayuda" role="status"></p>
+    </div>
+  </section>
+
+  <template id="tpl-grupo">
+    <article class="grupo">
+      <header class="grupo-cabeza">
+        <h3 class="grupo-titulo"></h3>
+        <p class="grupo-resumen"></p>
+      </header>
+      <ol class="filas"></ol>
+      <details class="todos">
+        <summary></summary>
+        <ol class="filas filas-todos"></ol>
+      </details>
+    </article>
+  </template>
+
+  <template id="tpl-fila">
+    <li class="fila">
+      <div class="fila-tienda"></div>
+      <div class="fila-producto">
+        <a class="fila-nombre" target="_blank" rel="noopener noreferrer"></a>
+        <span class="fila-extra"></span>
+        <span class="fila-hist"></span>
+        <div class="fila-herr">
+          <button type="button" class="mini" data-panel="historial">Historial</button>
+          <button type="button" class="mini" data-panel="margen">Margen</button>
+        </div>
+      </div>
+      <div class="fila-precio">
+        <strong></strong>
+        <s></s>
+        <span class="fila-litro"></span>
+      </div>
+      <div class="fila-panel" hidden></div>
+    </li>
+  </template>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>
