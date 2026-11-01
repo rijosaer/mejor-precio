@@ -67,7 +67,7 @@ export async function sincronizar() {
 }
 
 export const resumenes = () => guardado('mp-resumenes') || {};
-export const configServidor = () => guardado('mp-config') || { cadaHoras: 6, silencio: { activo: true, desde: 22, hasta: 7 }, resumenSemanal: true };
+export const configServidor = () => guardado('mp-config') || { cadaHoras: 6, silencio: { activo: true, desde: 22, hasta: 7 }, resumenSemanal: true, miTienda: 'aguapure' };
 
 // ── Tiendas ────────────────────────────────────────────────────────────────
 const TIENDAS_CONOCIDAS = [

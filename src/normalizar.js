@@ -126,6 +126,7 @@ const SINONIMOS = [
   ['ginebra', 'gin'],
   ['cerveza', 'cerv'],
   ['santafe', 'santa fe'],
+  ['cero', 'zero', 'sin alcohol'],
 ];
 
 // Palabras de categoría: si la tienda no las escribe ("Old Parr 12 años" sin
@@ -152,7 +153,7 @@ const VARIANTES = [
   // La tapa roja es el Antioqueño de siempre: no cuenta como variante.
   ['tapa azul', 'Tapa azul'], ['tapa verde', 'Tapa verde'], ['azul', 'Azul'], ['verde', 'Verde'],
   ['real', 'Real'], ['amarillo', 'Amarillo'], ['herencia', 'Herencia'], ['double', 'Double'],
-  ['imperial', 'Imperial'], ['pink', 'Pink'], ['rosado', 'Rosado'], ['vasos', 'Con vaso'], ['gratis', 'Con obsequio'],
+  ['con gas', 'Con gas'], ['gasificada', 'Con gas'], ['imperial', 'Imperial'], ['colombia roja', 'Roja'], ['colombia negra', 'Negra'], ['pink', 'Pink'], ['rosado', 'Rosado'], ['vasos', 'Con vaso'], ['gratis', 'Con obsequio'],
   ['obsequio', 'Con obsequio'], ['regalo', 'Con obsequio'],
   ['gran reserva', 'Gran reserva'], ['reserva', 'Reserva'], ['anejo', 'Añejo'], ['extra anejo', 'Extra añejo'],
   ['sabor', 'Con sabor'], ['saborizado', 'Con sabor'], ['saborizada', 'Con sabor'], ['michelada', 'Michelada'],
@@ -220,7 +221,21 @@ export function puntajePalabra(p, texto, lista = tokens(texto)) {
   return 0;
 }
 
-const textoDe = (producto) => normalizar(`${producto.nombre} ${producto.ml ? `${producto.ml}ml` : ''}`);
+// Abreviaturas y sinónimos de las tiendas: "S/A" (sin azúcar), "S/ALCOHOL",
+// "0,0", "libre de alcohol" y, en cerveza, "Cero": todo queda como "sin
+// alcohol". "Sabor sin igual" es el eslogan de la Águila Light, no un sabor.
+const expandir = (nombre) => {
+  let t = String(nombre)
+    .replace(/sabor sin igual/gi, ' ')
+    .replace(/\bs\s*\/\s*a\b/gi, ' sin azucar ')
+    .replace(/\bs\s*\/\s*alcohol\b/gi, ' sin alcohol ')
+    .replace(/(?<![\d.,])0[.,]0\s*%?(?![\d])/g, ' sin alcohol ')
+    .replace(/libre de alcohol/gi, ' sin alcohol ');
+  if (/cervez|beer/i.test(t) && /\b(cero|zero)\b/i.test(t)) t = t.replace(/\b(cero|zero)\b/gi, ' sin alcohol ');
+  return t;
+};
+
+const textoDe = (producto) => normalizar(`${expandir(producto.nombre)} ${producto.ml ? `${producto.ml}ml` : ''}`);
 
 // Todas las palabras de la búsqueda aparecen (incluidas las de categoría y el
 // tamaño). Lo usa el monitoreo para saber qué es exactamente «el» producto.
@@ -253,19 +268,14 @@ export function palabrasPresentacion(consulta) {
 }
 
 // Variantes que trae el nombre y que la búsqueda no pidió.
-// Abreviaturas de las tiendas: "S/A" (sin azúcar), "S/ALCOHOL", "0,0".
-const expandir = (nombre) =>
-  String(nombre)
-    .replace(/\bs\s*\/\s*a\b/gi, ' sin azucar ')
-    .replace(/\bs\s*\/\s*alcohol\b/gi, ' sin alcohol ')
-    .replace(/(?<![\d.,])0[.,]0(?![\d])/g, ' sin alcohol ');
-
 export function variantesNoPedidas(producto, palabras) {
   const texto = ` ${tokens(expandir(producto.nombre)).join(' ')} `;
   const pedido = ` ${palabras.join(' ')} `;
   const vistas = new Set();
   // Una variante se pidió si la búsqueda trae cualquiera de sus formas ("light" cubre "ligh" y "lite").
-  const pedidas = new Set(VARIANTES.filter(([frase]) => frase.split(' ').every((f) => pedido.includes(` ${f} `))).map(([, etiqueta]) => etiqueta));
+  const pedidas = new Set(VARIANTES.filter(([frase]) => frase.split(' ').filter((f) => !PALABRAS_VACIAS.has(f)).every((f) => pedido.includes(` ${f} `))).map(([, etiqueta]) => etiqueta));
+  // En cerveza, «cero» es «sin alcohol»: pedir una cubre la otra.
+  if (pedidas.has('Zero') || pedidas.has('Sin alcohol')) pedidas.add('Zero').add('Sin alcohol');
   for (const [frase, etiqueta] of VARIANTES) {
     if (texto.includes(` ${frase} `) && !pedidas.has(etiqueta)) vistas.add(etiqueta);
   }

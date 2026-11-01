@@ -7,6 +7,7 @@ import { configurarEscaner } from './escaner.js';
 import { abrirEstado, configurarEstado } from './estado.js';
 import { abrirLista, analizarLista, configurarLista, propuestaVieja } from './lista.js';
 import { LISTAS } from './listas-sugeridas.js';
+import { abrirMiTienda, configurarMiTienda } from './mitienda.js';
 import { configurarNovedades, iniciarNovedades } from './novedades.js';
 import { agregarAlPedido, configurarPedido, pintarPedido } from './pedido.js';
 import { abrirProveedores, configurarProveedores } from './proveedores.js';
@@ -16,9 +17,10 @@ import { abrirTutorial, configurarTutorial, iniciarTutorial } from './tutorial.j
 import { $, acciones, api, el, guardado } from './util.js';
 import { abrirVentas, configurarVentas } from './ventas.js';
 
-const VISTAS = ['entrar', 'buscar', 'ajustes', 'lista', 'catalogo', 'pedido', 'ventas', 'proveedores', 'estado'];
+const VISTAS = ['entrar', 'buscar', 'ajustes', 'lista', 'mitienda', 'catalogo', 'pedido', 'ventas', 'proveedores', 'estado'];
 const AL_ABRIR = {
   lista: abrirLista,
+  mitienda: abrirMiTienda,
   catalogo: abrirCatalogo,
   pedido: pintarPedido,
   ventas: abrirVentas,
@@ -199,6 +201,7 @@ configurarVentas();
 configurarProveedores();
 configurarAjustes();
 configurarEstado();
+configurarMiTienda();
 configurarEscaner();
 configurarNovedades((vista) => (vista === 'ajustes' ? abrirAjustes() : mostrar(vista)));
 aplicarApariencia();

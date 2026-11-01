@@ -177,6 +177,9 @@ test('nombres reales: variantes abreviadas, «#» por Ñ, no bebidas y six pack 
   assert.deepEqual(variantesNoPedidas(p('CERVEZA AGUILA S/ALCOHOL 330ML X6'), aguila), ['Sin alcohol']);
   assert.deepEqual(variantesNoPedidas(p('Cerveza Aguila 0,0 lata x330ml'), aguila), ['Sin alcohol']);
   assert.deepEqual(variantesNoPedidas(p('Cerveza Aguila Imperial Botella 330ml'), aguila), ['Imperial']);
+  assert.deepEqual(variantesNoPedidas(p('Cerveza Club Colombia Roja Lata 330 ml'), palabrasClave('cerveza club colombia 330')), ['Roja']);
+  assert.deepEqual(variantesNoPedidas(p('Cerveza Club Colombia Roja Lata 330 ml'), palabrasClave('club colombia roja')), []);
+  assert.deepEqual(variantesNoPedidas(p('Aguardiente Antioqueño tapa roja 750 ml'), palabrasClave('antioqueño')), [], 'la tapa roja sigue siendo la normal');
   assert.deepEqual(variantesNoPedidas(p('Aguardiente Antioqueño Verde S/A 750 Ml'), palabrasClave('antioqueño')), ['Sin azúcar', 'Verde']);
   assert.deepEqual(variantesNoPedidas(p('Whisky Johnnie Walker Double Black Label 700 ml'), palabrasClave('johnnie walker black')), ['Double']);
   assert.deepEqual(variantesNoPedidas(p("Pack Buchanan's 12 Años 750ml Gratis Botella de 200ml"), palabrasClave('buchanans 12')), ['Con obsequio']);
@@ -203,4 +206,33 @@ test('nombres reales: variantes abreviadas, «#» por Ñ, no bebidas y six pack 
   assert.deepEqual(inferirPaquete('Cerveza Botella PILSEN Nacional (1980 ml)', 1980, 1), { ml: 330, unidades: 6 });
   assert.deepEqual(inferirPaquete('Refajo ANDINA refrescante (1500 ml)', 1500, 1), { ml: 1500, unidades: 1 }, 'no es cerveza');
   assert.deepEqual(inferirPaquete('Aguardiente Antioqueño 1050 ml', 1050, 1), { ml: 1050, unidades: 1 });
+});
+
+test('cerveza sin alcohol: «Cero», «0,0», «libre de alcohol» y «S/ALCOHOL» son lo mismo, y no se mezclan con la Light', async () => {
+  const { variantesNoPedidas } = await import('../src/normalizar.js');
+  const nombres = [
+    'Cerveza Aguila Cero Lata 330 ml',
+    'Cerveza AGUILA lata cero libre de alcohol (330 ml)',
+    'Cerveza Aguila 0,0% lata x6unds x330ml',
+    'CERVEZA AGUILA S/ALCOHOL 330ML X6',
+    'Cerveza Águila sin Alcohol Lata 330 Ml',
+  ];
+  const aguila = palabrasClave('cerveza aguila');
+  for (const n of nombres) assert.deepEqual(variantesNoPedidas({ nombre: n }, aguila), ['Sin alcohol'], n);
+  assert.deepEqual(variantesNoPedidas({ nombre: 'Cerveza AGUILA LIGHT lata sabor sin igual (330 ml)' }, aguila), ['Light'], '«sabor sin igual» es el eslogan, no un sabor');
+  // Buscar la sin alcohol con cualquiera de sus nombres trae todas y deja fuera la Light.
+  const productos = [...nombres, 'Cerveza Aguila Light Lata 330 ml', 'Cerveza Aguila Lata 330 ml'].map((n) => producto(n));
+  for (const q of ['cerveza aguila sin alcohol', 'aguila cero', 'cerveza aguila cero']) {
+    const salida = filtrarProductos(productos, palabrasClave(q)).map((p) => p.nombre);
+    assert.deepEqual(salida.sort(), [...nombres].sort(), q);
+  }
+  // Y al buscar la Light no aparece la sin alcohol.
+  const light = filtrarProductos(productos, palabrasClave('cerveza aguila light')).map((p) => p.nombre);
+  assert.deepEqual(light, ['Cerveza Aguila Light Lata 330 ml']);
+});
+
+test('el agua con gas es otra variante del agua', async () => {
+  const { variantesNoPedidas } = await import('../src/normalizar.js');
+  assert.deepEqual(variantesNoPedidas({ nombre: 'Agua con gas CRISTAL botella (600 ml)' }, palabrasClave('agua cristal 600')), ['Con gas']);
+  assert.deepEqual(variantesNoPedidas({ nombre: 'Agua con gas CRISTAL botella (600 ml)' }, palabrasClave('agua cristal con gas')), []);
 });

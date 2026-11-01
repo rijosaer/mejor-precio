@@ -102,9 +102,13 @@ export function agrupar(datos, { soloDisponibles = true, modo = 'precio', varian
       if (filtros.soloOfertas && !(descuento(p) >= ajustes().ofertas.oferta || p.nota)) continue;
       if (filtros.min > 0 && p.precio < filtros.min) continue;
       if (filtros.max > 0 && p.precio > filtros.max) continue;
-      const clave = p.ml ? `${p.unidades || 1}x${p.ml}` : 'sin';
-      if (!grupos.has(clave)) grupos.set(clave, { clave, ml: p.ml, unidades: p.unidades || 1, productos: [] });
-      grupos.get(clave).productos.push({ ...p, tienda: t });
+      // Una variante que no se pidió (Light, sin alcohol, Zero…) va en su propio
+      // grupo: nunca se compara con la normal.
+      const tipo = p.otraVariante ? p.variante : '';
+      const clave = p.ml ? `${p.unidades || 1}x${p.ml}${tipo ? `|${tipo}` : ''}` : `sin${tipo ? `|${tipo}` : ''}`;
+      if (!grupos.has(clave)) grupos.set(clave, { clave, ml: p.ml, unidades: p.unidades || 1, variante: tipo || null, productos: [], mios: [] });
+      // La tienda propia no compite: va aparte como «Tu precio».
+      grupos.get(clave)[t.miTienda ? 'mios' : 'productos'].push({ ...p, tienda: t });
     }
   }
   const lista = [...grupos.values()].map((g) => {
@@ -113,12 +117,14 @@ export function agrupar(datos, { soloDisponibles = true, modo = 'precio', varian
     for (const p of g.productos) if (!porTienda.has(p.tienda.id)) porTienda.set(p.tienda.id, p);
     g.mejores = [...porTienda.values()].sort((a, b) => b.disponible - a.disponible || total(a) - total(b));
     g.litro = g.mejores[0]?.disponible ? precioPorLitro(g.mejores[0]) : null;
+    g.mio = g.mios.sort((a, b) => b.disponible - a.disponible || a.precio - b.precio)[0] || null;
     return g;
   });
   const favoritas = presentacionesFavoritas();
   const orden = lista.sort((a, b) => {
-    if (a.clave === 'sin') return 1;
-    if (b.clave === 'sin') return -1;
+    if (a.clave.startsWith('sin') !== b.clave.startsWith('sin')) return a.clave.startsWith('sin') ? 1 : -1;
+    // Las variantes que no se pidieron, después de lo que se buscó.
+    if (Boolean(a.variante) !== Boolean(b.variante)) return a.variante ? 1 : -1;
     const fa = favoritas.indexOf(a.clave);
     const fb = favoritas.indexOf(b.clave);
     if (fa !== fb) return (fa < 0 ? 99 : fa) - (fb < 0 ? 99 : fb);
@@ -570,7 +576,7 @@ function barraFiltros(datos) {
 function textoParaCompartir(datos, grupos) {
   const lineas = [`Mejor precio para «${datos.consulta}»:`];
   for (const g of grupos.slice(0, 4)) {
-    if (g.clave === 'sin' || !g.mejores[0]?.disponible) continue;
+    if (!g.ml || !g.mejores[0]?.disponible) continue;
     const top = g.mejores.filter((p) => p.disponible).slice(0, 3).map((p) => `${p.tienda.nombre} ${pesos.format(p.precio)}`);
     lineas.push(`• ${presentacion(g)}: ${top.join(' · ')}`);
   }
@@ -660,23 +666,26 @@ export function pintarResultados() {
     const cabeza = nodo.querySelector('.grupo-cabeza');
     const [primero, segundo] = g.mejores;
     cabeza.prepend(foto(primero?.imagen, 'grupo-foto', ''));
-    nodo.querySelector('.grupo-titulo').textContent = presentacion(g);
+    nodo.querySelector('.grupo-titulo').textContent = `${presentacion(g)}${g.variante ? ` · ${g.variante}` : ''}`;
     const resumen = nodo.querySelector('.grupo-resumen');
     const conLlegada = modo === 'total';
     const costoDe = (p) => (conLlegada ? costoLlegada(p.tienda.id, p.precio) ?? 0 : 0);
-    if (primero?.disponible && g.clave !== 'sin') {
+    if (primero?.disponible && Boolean(g.ml)) {
       resumen.append('Más barato: ', el('b', '', `${primero.tienda.nombre} ${pesos.format(primero.precio + costoDe(primero))}`));
       if (conLlegada && costoDe(primero)) resumen.append(` (${pesos.format(primero.precio)} + ${pesos.format(costoDe(primero))} de envío o traslado)`);
       if (segundo) resumen.append(` · ${pesos.format(segundo.precio + costoDe(segundo) - primero.precio - costoDe(primero))} menos que ${segundo.tienda.nombre}`);
       else resumen.append(' · solo una tienda lo tiene');
       if (g.litro) resumen.append(` · ${pesos.format(Math.round(g.litro))} / L`);
       cabeza.append(boton('Agregar al pedido', 'mini grupo-pedido', () => acciones.agregarAlPedido?.(g, datos.consulta)));
+    } else if (!g.mejores.length && g.mio) {
+      resumen.textContent = 'Solo tu tienda tiene esta presentación.';
     } else {
       resumen.textContent = 'No se puede comparar: el nombre no dice el tamaño.';
     }
+    if (g.mio) cabeza.append(lineaMia(g, primero));
 
     const filas = nodo.querySelector('.filas');
-    g.mejores.forEach((p, i) => filas.append(fila(p, i === 0 && p.disponible && g.clave !== 'sin', g)));
+    g.mejores.forEach((p, i) => filas.append(fila(p, i === 0 && p.disponible && Boolean(g.ml), g)));
 
     const otros = g.productos.length - g.mejores.length;
     const detalles = nodo.querySelector('.todos');
@@ -701,9 +710,22 @@ export function pintarResultados() {
   );
 }
 
+// «Tu precio» en el grupo: cuánto cobra tu tienda y qué tan lejos está del más barato.
+function lineaMia(g, primero) {
+  const linea = el('p', 'grupo-mio');
+  linea.append(el('span', 'chip chip-propio', 'Tu tienda'), ` ${g.mio.tienda.nombre}: `, el('b', '', pesos.format(g.mio.precio)));
+  if (primero?.disponible) {
+    const dif = ((g.mio.precio - primero.precio) / primero.precio) * 100;
+    if (Math.abs(dif) < 1) linea.append(' · igual al más barato');
+    else linea.append(` · ${Math.abs(dif).toFixed(0)} % ${dif > 0 ? 'más caro' : 'más barato'} que ${primero.tienda.nombre}`);
+  }
+  if (!g.mio.disponible) linea.append(' · agotado en tu carta');
+  return linea;
+}
+
 // Cuando hay varias presentaciones, cuál sale más barata por litro.
 function pintarPorLitro(caja, grupos) {
-  const conLitro = grupos.filter((g) => g.litro && g.clave !== 'sin');
+  const conLitro = grupos.filter((g) => g.litro && g.ml && !g.variante);
   if (conLitro.length < 2) return;
   const ordenados = [...conLitro].sort((a, b) => a.litro - b.litro);
   const [mejor] = ordenados;

@@ -25,6 +25,7 @@
       <button id="abrir-tutorial" class="boton-texto" type="button">Cómo funciona</button>
       <button id="abrir-lista" class="boton-texto" type="button" data-vista="lista" hidden>Mi lista</button>
       <button id="abrir-pedido" class="boton-texto" type="button" data-vista="pedido" hidden>Pedido</button>
+      <button id="abrir-mitienda" class="boton-texto" type="button" data-vista="mitienda" hidden>Mi tienda</button>
       <button id="abrir-catalogo" class="boton-texto" type="button" data-vista="catalogo" hidden>Catálogo</button>
       <button id="abrir-ventas" class="boton-texto" type="button" data-vista="ventas" hidden>Ventas</button>
       <button id="abrir-proveedores" class="boton-texto" type="button" data-vista="proveedores" hidden>Proveedores</button>
@@ -104,6 +105,47 @@
       <div id="cat-estado" class="estado" aria-live="polite"></div>
       <div id="cat-items" class="cat-items"></div>
       <p class="nota">El CSV trae tu precio, el sugerido, el estado (activo o pausar) y el inventario para subirlo a tu tienda. Los productos se revisan solos según la frecuencia de Ajustes → Monitoreo.</p>
+    </section>
+
+    <!-- Mi tienda -->
+    <section id="vista-mitienda" hidden>
+      <h2>Mi tienda · <span id="mt-nombre">Agua Pure</span></h2>
+      <p class="ayuda">Cada producto de tu carta en línea contra el más barato de las demás tiendas (el mismo paquete o, si sale menos, juntando paquetes más chicos). Las cajas con hielo se comparan sin el valor del hielo. Se actualiza solo, unos productos cada hora.</p>
+      <fieldset class="aj-seccion">
+        <legend>Tu regla de precio</legend>
+        <div class="rejilla">
+          <label>Frente al más barato (%)
+            <input id="mt-sobreMinimo" type="number" inputmode="decimal" step="1" min="-50" max="100">
+          </label>
+          <label>Recargo de las frías (%)
+            <input id="mt-recargoFria" type="number" inputmode="decimal" step="1" min="0" max="100">
+          </label>
+          <label>No cambiar si la diferencia es menor a (%)
+            <input id="mt-tolerancia" type="number" inputmode="decimal" step="1" min="0" max="50">
+          </label>
+          <label>Margen mínimo sobre tu costo (%)
+            <input id="mt-margenMin" type="number" inputmode="decimal" step="1" min="0" max="300">
+          </label>
+          <label>Redondear a
+            <select id="mt-redondeo">
+              <option value="50">$50</option>
+              <option value="100">$100</option>
+              <option value="500">$500</option>
+              <option value="1000">$1.000</option>
+            </select>
+          </label>
+        </div>
+        <p class="ayuda">0 % = igualar al más barato; 5 % = hasta 5 % más caro (por el domicilio, por ejemplo); −2 % = 2 % más barato. El margen mínimo solo se usa en los productos con costo anotado.</p>
+      </fieldset>
+      <div id="mt-resumen" class="cat-resumen"></div>
+      <div class="cat-acciones">
+        <button id="mt-actualizar" class="boton-texto" type="button">Comparar</button>
+        <button id="mt-exportar" class="boton-texto" type="button">Exportar CSV</button>
+        <button id="mt-aplicar" class="boton" type="button" disabled title="Necesita las credenciales de TRIVO POS">Aplicar en TRIVO</button>
+      </div>
+      <p class="nota nota-credenciales">«Aplicar en TRIVO», tus costos reales, el inventario y las ventas necesitan acceso a TRIVO POS con credenciales. Mientras tanto, exporta el CSV y cambia los precios en el panel de TRIVO; los costos puedes anotarlos aquí.</p>
+      <div id="mt-estado" class="estado" aria-live="polite"></div>
+      <div id="mt-items" class="cat-items"></div>
     </section>
 
     <!-- Mi pedido -->
@@ -278,6 +320,16 @@
       <div class="aj-botones">
         <button id="aj-proveedores" class="boton-texto" type="button">Mis proveedores</button>
         <button id="aj-estado-tiendas" class="boton-texto" type="button">Estado de las tiendas</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="aj-seccion">
+      <legend>Mi tienda</legend>
+      <p class="ayuda">Tu propia tienda no compite en los resultados: sale aparte como «Tu precio» y se analiza en «Mi tienda».</p>
+      <div class="rejilla">
+        <label>Mi tienda es
+          <select id="aj-mitienda"></select>
+        </label>
       </div>
     </fieldset>
 

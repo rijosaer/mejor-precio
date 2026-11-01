@@ -288,3 +288,22 @@ En Catálogo, cada producto que vendes tiene «Compré», «Vendí» y «Contar�
 - 10 intentos fallidos cada 15 minutos por IP, contados también en Netlify Blobs (vale para todas las instancias).
 - Las rutas que cambian datos exigen `content-type: application/json`, que un formulario de otro sitio no puede mandar.
 - El service worker solo guarda respuestas correctas: un error nunca reemplaza la copia buena.
+
+## 15. Mi tienda
+
+**Archivos:** `src/mitienda.js`, `public/mitienda.js`, `public/precios.js` · **Tests:** `tests/mitienda.test.js`
+
+La tienda propia se elige en **Ajustes → Mi tienda** (por defecto Agua Pure; también puede ser un proveedor propio). En las búsquedas no compite: sale como «Tu precio» en cada grupo, y el catálogo de reventa y Mi pedido no la cuentan como lugar de compra.
+
+Para cada producto de la carta (`catalogo()` de `src/tiendas/aguapure.js`) se arma una búsqueda sin las palabras de presentación («cerveza aguila 330») y se consulta el resto de las tiendas. La **referencia** es lo más barato a lo que llega un cliente: el mismo paquete en otra tienda o, si sale menos, el mejor precio por unidad del mismo tamaño multiplicado por las unidades. Las cajas «+ Hielo (3 kilos)» se comparan sin lo que cobras por 3 kg de hielo.
+
+```
+objetivo  = referencia × (1 + sobreMinimo % + recargoFria % si es «Fría»)
+piso      = costo × (1 + margenMin %)            (si anotaste el costo)
+sugerido  = máx(objetivo, piso) + hielo, redondeado
+acción    = subir / bajar si el cambio es ≥ tolerancia %; si no, mantener
+```
+
+Los resultados se guardan en `mitienda/<id>` y los costos en `mitienda-costos`. El monitoreo de cada hora vuelve a comparar los productos con más de 20 horas.
+
+**Pendiente (necesita credenciales de TRIVO POS):** costos reales de compra, existencias, ventas por producto y aplicar los precios aprobados. La API privada de TRIVO tiene `/api/inventory/resale-products/`, `/api/inventory/product-stock/`, `/api/reports/sales-by-product/`, `/api/purchasing/orders/` y `PATCH /api/catalog/products/<id>/`, con sesión por usuario y contraseña (`/api/auth/login/`, CSRF). Se usarían las variables `TRIVO_USUARIO` y `TRIVO_CLAVE`.

@@ -135,9 +135,12 @@ export async function catalogoTiendas() {
   ];
 }
 
-export async function comparar(consulta, { tiendas, fresco = false } = {}) {
+// `miTienda`: la tienda propia; sus resultados se marcan con `miTienda: true`
+// (la app la muestra como «Tu precio», no como competencia). `excluir`: ids
+// que no se consultan (el análisis de Mi tienda no se compara consigo mismo).
+export async function comparar(consulta, { tiendas, fresco = false, miTienda = null, excluir = [] } = {}) {
   const proveedores = await leerProveedores().catch((e) => (console.error('[proveedores]', e.message), []));
-  const modulos = elegirTiendas(tiendas, proveedores);
+  const modulos = elegirTiendas(tiendas, proveedores).filter(({ tienda }) => !excluir.includes(tienda.id));
   const codigo = codigoBarras(consulta);
   const resultados = codigo ? await porCodigo(codigo, modulos, { fresco }) : await porNombre(consulta, modulos, { fresco });
 
@@ -149,7 +152,10 @@ export async function comparar(consulta, { tiendas, fresco = false } = {}) {
     const sugerencia = sugerirConsulta(consulta, resultados.flatMap((r) => r._crudos));
     if (sugerencia && normalizar(sugerencia) !== normalizar(consulta)) datos.sugerencia = sugerencia;
   }
-  for (const r of resultados) delete r._crudos;
+  for (const r of resultados) {
+    delete r._crudos;
+    if (miTienda && r.id === miTienda) r.miTienda = true;
+  }
   return datos;
 }
 

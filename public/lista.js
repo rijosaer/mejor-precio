@@ -70,7 +70,7 @@ export async function analizarLista() {
       const grupos = agrupar(datos, { soloDisponibles: true, modo: 'precio' });
       // La presentación del tamaño que se escribió ("…750"); si no hay, la más comparada.
       const tamanos = item.q.match(/\d+/g) || [];
-      const g = grupos.find((x) => x.clave !== 'sin' && tamanos.includes(String(x.ml))) || grupos.find((x) => x.clave !== 'sin');
+      const g = grupos.find((x) => x.ml && !x.variante && tamanos.includes(String(x.ml))) || grupos.find((x) => x.ml && !x.variante);
       if (g?.mejores?.length) {
         const [primero, segundo] = g.mejores;
         filas.push({

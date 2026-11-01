@@ -6,6 +6,7 @@ import { catalogoTiendas, comparar, estadoTiendas } from './comparador.js';
 import { guardarAjustesCompartidos, guardarConfig, leerAjustesCompartidos, leerConfig } from './config.js';
 import { borrarMovimiento, leerMovimientos, registrarMovimiento } from './inventario.js';
 import { guardarLista, leerLista, novedades, registrarBusqueda, revisarSalud } from './monitor.js';
+import { analizarProducto, estadoMiTienda, guardarCostos } from './mitienda.js';
 import { borrarProveedor, guardarProveedor, leerProveedores } from './proveedores.js';
 import { clavePublica, desuscribir, enviar, pushActivo, suscribir, suscripciones } from './push.js';
 
@@ -175,7 +176,8 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
     if (ruta === '/api/buscar') {
       const q = (url.searchParams.get('q') || '').trim();
       if (q.length < 2 || q.length > 80) return json(400, { error: 'Escribe entre 2 y 80 caracteres' });
-      const datos = await comparar(q, { tiendas: listaDeIds(url.searchParams.get('tiendas')) });
+      const { miTienda } = await leerConfig();
+      const datos = await comparar(q, { tiendas: listaDeIds(url.searchParams.get('tiendas')), miTienda });
       // La búsqueda queda en el historial del servidor (y, si es de la lista, alimenta el monitoreo).
       datos.series = await registrarBusqueda(q, datos).catch((error) => (console.error('[historial]', error.message), {}));
       return json(200, datos);
@@ -239,6 +241,15 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
     }
     if (ruta === '/api/movimientos' && metodo === 'DELETE') {
       return json(200, { movimientos: await borrarMovimiento(String(url.searchParams.get('id') || '')) });
+    }
+
+    // Mi tienda: la carta propia frente al mercado.
+    if (ruta === '/api/mi-tienda' && metodo === 'GET') return json(200, await estadoMiTienda());
+    if (ruta === '/api/mi-tienda/comparar' && metodo === 'POST') {
+      return validar(async () => json(200, { resultado: await analizarProducto(String((await leerJson(request)).id || '')) }));
+    }
+    if (ruta === '/api/mi-tienda/costos' && metodo === 'PUT') {
+      return validar(async () => json(200, { costos: await guardarCostos((await leerJson(request, 40_000)).costos) }));
     }
 
     // Proveedores propios (sin página web).

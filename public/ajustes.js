@@ -172,6 +172,10 @@ async function pintarPush() {
 // ── Monitoreo (vive en el servidor) ────────────────────────────────────────
 function pintarMonitoreo() {
   const c = configServidor();
+  const mia = $('#aj-mitienda');
+  mia.replaceChildren(new Option('Ninguna', ''));
+  for (const t of tiendas) mia.append(new Option(t.nombre, t.id));
+  mia.value = c.miTienda ?? '';
   $('#aj-mon-horas').value = String(c.cadaHoras);
   $('#aj-mon-silencio').checked = c.silencio.activo;
   $('#aj-mon-desde').value = c.silencio.desde;
@@ -185,6 +189,7 @@ async function guardarMonitoreo(activas) {
     silencio: { activo: $('#aj-mon-silencio').checked, desde: Number($('#aj-mon-desde').value), hasta: Number($('#aj-mon-hasta').value) },
     resumenSemanal: $('#aj-mon-semanal').checked,
     tiendas: Object.entries(activas).filter(([, v]) => v).map(([id]) => id),
+    miTienda: $('#aj-mitienda').value || null,
   };
   const r = await api('/api/config', { method: 'PUT', cuerpo: { config } });
   guardado('mp-config', r.config);
@@ -208,9 +213,9 @@ export async function abrirAjustes() {
   $('#aj-tema').value = a.apariencia.tema;
   $('#aj-letra').value = String(a.apariencia.letra);
   $('#aj-listo').textContent = '';
-  pintarMonitoreo();
 
   tiendas = await catalogoTiendas();
+  pintarMonitoreo();
   const cajaLog = $('#aj-log-tiendas');
   const cajaCb = $('#aj-cashback');
   cajaLog.replaceChildren();

@@ -13,6 +13,8 @@ export const CONFIG_POR_DEFECTO = {
   tiendas: POR_DEFECTO,
   silencio: { activo: true, desde: 22, hasta: 7 },
   resumenSemanal: true,
+  // La tienda propia (Agua Pure): sale como «Tu precio» y se analiza en «Mi tienda».
+  miTienda: 'aguapure',
 };
 
 const hora = (v, porDefecto) => (Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= 23 ? Number(v) : porDefecto);
@@ -30,6 +32,12 @@ export function limpiarConfig(c = {}) {
       hasta: hora(s.hasta, CONFIG_POR_DEFECTO.silencio.hasta),
     },
     resumenSemanal: c.resumenSemanal === undefined ? true : Boolean(c.resumenSemanal),
+    miTienda:
+      c.miTienda === undefined
+        ? CONFIG_POR_DEFECTO.miTienda
+        : ids.has(String(c.miTienda)) || /^prov-[\w-]{1,40}$/.test(String(c.miTienda))
+          ? String(c.miTienda)
+          : null,
   };
 }
 

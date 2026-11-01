@@ -9,6 +9,40 @@ import { $, boton, el, guardado } from './util.js';
 
 export const VERSIONES = [
   {
+    version: '2.2',
+    fecha: '2026-11-01',
+    titulo: 'Mi tienda: tus precios de Agua Pure frente al mercado',
+    cambios: [
+      {
+        titulo: 'Mi tienda',
+        antes: 'Agua Pure aparecía en las búsquedas como si fuera una tienda de la competencia.',
+        ahora: 'Cada producto de tu carta se compara con el más barato de las demás tiendas: cuáles están caros, cuáles puedes subir y cuáles van en precio, con el precio sugerido según tu regla.',
+        donde: 'mitienda',
+      },
+      {
+        titulo: 'Tu regla de precio',
+        antes: 'No había forma de decir a cuánto quieres vender frente al mercado.',
+        ahora: 'Eliges cuánto por encima o por debajo del más barato, el recargo de las frías, el margen mínimo sobre tu costo y el redondeo. Exportas la lista en CSV para cambiar los precios en TRIVO.',
+        donde: 'mitienda',
+      },
+      {
+        titulo: 'Cajas de 24 bien comparadas',
+        antes: 'Una caja de 24 solo se comparaba con otras cajas de 24.',
+        ahora: 'También con lo que cuesta juntar paquetes más chicos (cuatro six pack). Las cajas con hielo se comparan sin el valor del hielo.',
+      },
+      {
+        titulo: 'Light, sin alcohol y con gas, cada una en su grupo',
+        antes: 'Al mostrar las variantes, la Light y la sin alcohol quedaban en el mismo grupo que la cerveza normal, y el agua con gas se comparaba con el agua normal.',
+        ahora: 'Cada variante tiene su grupo («6 × 330 ml · Light»). «Cero», «0,0», «libre de alcohol» y «S/ALCOHOL» se reconocen como sin alcohol, y buscar «águila sin alcohol» las encuentra todas.',
+      },
+      {
+        titulo: '«Tu precio» en cada búsqueda',
+        antes: 'Tu tienda podía salir como «Mejor precio» entre la competencia.',
+        ahora: 'Sale aparte, con cuánto más caro o más barato estás que la tienda más barata.',
+      },
+    ],
+  },
+  {
     version: '2.1',
     fecha: '2026-11-01',
     titulo: 'Listas de cervezas y licores, D1 y búsqueda probada con precios reales',

@@ -17,7 +17,9 @@ const LATAS_POR_CAJA = 24;
 // Lo que va antes de la presentación: "Aguila Original x 24 unidades" → "aguila original".
 const base = (nombre) => nombre.split(/\s+x\s+/i)[0].replace(/^caja de\s+/i, '').trim().toLowerCase();
 
-export async function buscar(consulta) {
+// La carta completa, con la sección, el id y si es una caja con hielo. La usan
+// la búsqueda (filtrando) y «Mi tienda» (cuando Agua Pure es la tienda propia).
+export async function catalogo() {
   const datos = (await pedir(`${BASE}/api/public/menu/${SLUG}/`)).data;
   const productos = (datos?.sections ?? []).flatMap((s) => (s.products ?? []).map((p) => ({ ...p, seccion: s.name })));
 
@@ -29,10 +31,7 @@ export async function buscar(consulta) {
     if (ml && !mlPorBase.has(base(p.name))) mlPorBase.set(base(p.name), ml);
   }
 
-  const palabras = palabrasClave(consulta);
-  const buscados = productos.filter((p) => coincideBusqueda({ nombre: `${p.seccion} ${p.name}` }, palabras));
-
-  return buscados.flatMap((p) => {
+  return productos.flatMap((p) => {
     const variantes = p.variants?.length ? p.variants : [null];
     return variantes.map((v) => {
       const nombre = repararNombre(v ? `${p.name} ${v.name}` : p.name);
@@ -42,6 +41,11 @@ export async function buscar(consulta) {
       const precio = promo && promo < lista ? promo : lista;
       const esCaja = /^caja de\s/i.test(p.name) && !/\bx\s*\d{1,2}\b(?!\s*ml)/i.test(p.name);
       return {
+        id: `${p.id}${v ? `-${v.id}` : ''}`,
+        seccion: p.seccion,
+        base: repararNombre(p.name),
+        variante: v ? repararNombre(v.name) : null,
+        conHielo: /\+\s*hielo/i.test(p.name),
         nombre,
         precio,
         precioAntes: precio < lista ? lista : null,
@@ -56,4 +60,11 @@ export async function buscar(consulta) {
       };
     });
   });
+}
+
+export async function buscar(consulta) {
+  const palabras = palabrasClave(consulta);
+  return (await catalogo())
+    .filter((p) => coincideBusqueda({ nombre: `${p.seccion} ${p.base}` }, palabras))
+    .map(({ id, seccion, base: _b, variante, conHielo, ...p }) => p);
 }

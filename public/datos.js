@@ -21,6 +21,8 @@ export const AJUSTES_POR_DEFECTO = {
   orden: 'precio',
   ofertas: { oferta: 5, liquidacion: 25 },
   apariencia: { tema: 'auto', letra: 100 },
+  // Regla de precio de Mi tienda (ver public/precios.js).
+  miTiendaRegla: {},
   t: 0,
 };
 
