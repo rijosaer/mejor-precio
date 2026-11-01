@@ -51,6 +51,7 @@ const detalle = (id) => ({
 });
 const llamadas = [];
 let claveValida = true;
+let rechazarPatch = 0; // PATCH que responden 401, como si la sesión venciera
 const respuesta = (cuerpo, { estado = 200, cookies = [] } = {}) => {
   const h = new Headers({ 'content-type': 'application/json' });
   for (const c of cookies) h.append('set-cookie', c);
@@ -76,6 +77,10 @@ globalThis.fetch = async (url, opciones = {}) => {
   if (prod) {
     const clave = prod[2] ? `${prod[1]}-${prod[2]}` : prod[1];
     if (metodo === 'PATCH') {
+      if (rechazarPatch > 0) {
+        rechazarPatch--;
+        return respuesta({ detail: 'token vencido' }, { estado: 401 });
+      }
       if (opciones.headers['x-csrftoken'] !== 'tok123') return respuesta({}, { estado: 403 });
       const cuerpo = JSON.parse(opciones.body);
       PRECIOS[clave] = Number(prod[2] ? cuerpo.price : cuerpo.base_price);
@@ -251,4 +256,14 @@ test('si el precio cambió en TRIVO no se pisa; las variantes van por su ruta', 
   assert.equal(patch.ruta, '/api/catalog/products/4/variants/9/');
   assert.deepEqual(JSON.parse(patch.body), { price: '44300' });
   await assert.rejects(guardarMargenes({ general: 95 }), /entre 0 y 89/);
+});
+
+test('si la sesión vence justo antes del cambio, vuelve a entrar y lo reintenta una vez', async () => {
+  llamadas.length = 0;
+  rechazarPatch = 1;
+  const r = await trivo.cambiarPrecio({ producto: 3, precio: 86000, esperado: 85000 });
+  assert.deepEqual(r, { antes: 85000, despues: 86000 });
+  assert.equal(PRECIOS[3], 86000);
+  const orden = llamadas.filter((l) => l.metodo !== 'GET' || l.ruta === '/api/auth/csrf/').map((l) => `${l.metodo} ${l.ruta}`);
+  assert.deepEqual(orden, ['PATCH /api/catalog/products/3/', 'GET /api/auth/csrf/', 'POST /api/auth/login/', 'PATCH /api/catalog/products/3/']);
 });

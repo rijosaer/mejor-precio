@@ -175,11 +175,18 @@ export async function cambiarPrecio({ producto, variante = null, precio, esperad
   }
   const destino = variante ? `${ruta}variants/${variante}/` : ruta;
   const cuerpo = variante ? { price: String(precio) } : { base_price: String(precio) };
-  const res = await llamar(destino, sesion.cookies, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json', 'x-csrftoken': sesion.cookies.get('csrftoken') || '', referer: `${BASE}/catalog/products/${producto}`, origin: BASE },
-    body: JSON.stringify(cuerpo),
-  });
+  const patch = () =>
+    llamar(destino, sesion.cookies, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'x-csrftoken': sesion.cookies.get('csrftoken') || '', referer: `${BASE}/catalog/products/${producto}`, origin: BASE },
+      body: JSON.stringify(cuerpo),
+    });
+  let res = await patch();
+  // Si la sesión venció justo entre la lectura y el cambio, se vuelve a entrar una vez.
+  if (res.status === 401 || res.status === 403) {
+    await iniciarSesion();
+    res = await patch();
+  }
   if (!res.ok) throw new Error(`TRIVO no aceptó el precio: HTTP ${res.status}`);
   const nuevo = precioEnTrivo((await leerRuta(ruta))?.data ?? {}, variante);
   if (Math.round(nuevo) !== precio) throw new Error('TRIVO respondió bien pero el precio no cambió');

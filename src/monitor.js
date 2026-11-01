@@ -285,7 +285,9 @@ export async function migrar() {
 }
 
 // ── Revisión programada ─────────────────────────────────────────────────────
-export async function revisar({ maximo = 6, ahora = Date.now() } = {}) {
+export async function revisar({ maximo = 6, ahora = Date.now(), limiteMs = 30_000 } = {}) {
+  const inicio = Date.now();
+  const quedaTiempo = () => limiteMs - (Date.now() - inicio);
   await migrar();
   const [lista, config] = await Promise.all([leerLista(), leerConfig()]);
   const docs = await Promise.all(lista.map((x) => leer(`serie/${x.id}`)));
@@ -320,12 +322,15 @@ export async function revisar({ maximo = 6, ahora = Date.now() } = {}) {
     ...(await resumenSemanal({ ahora, config, lista }).catch((e) => (console.error('[semanal]', e.message), []))),
   ];
   if (sistema.length) await sumarAlertas(SISTEMA, sistema);
-  // Mi tienda: unos pocos productos por hora, así el análisis se mantiene al día solo.
-  // Costos, existencias y ventas de TRIVO (solo lectura), cada 6 horas.
-  const trivo = await refrescarTrivo({ ahora }).catch((e) => (console.error('[trivo]', e.message), false));
-  const miTienda = await refrescarMiTienda({ maximo: pendientes.length ? 2 : 4, ahora }).catch((e) => (console.error('[mi tienda]', e.message), 0));
+  // Los avisos salen antes de lo de Mi tienda: si la función se queda sin
+  // tiempo (Netlify la corta a los 30 s), no se pierden.
   // También se llama sin avisos: así salen los que esperaban fuera del horario de silencio.
   await notificarAvisos([...avisos, ...sistema], { ahora }).catch((e) => console.error('[push]', e.message));
+  // TRIVO (cada hora) y Mi tienda (unos pocos productos por vez) solo con
+  // tiempo de sobra; lo que no alcance queda para la próxima revisión.
+  const trivo = quedaTiempo() > 15_000 ? await refrescarTrivo({ ahora }).catch((e) => (console.error('[trivo]', e.message), false)) : false;
+  const miTienda =
+    quedaTiempo() > 12_000 ? await refrescarMiTienda({ maximo: pendientes.length ? 2 : 4, ahora }).catch((e) => (console.error('[mi tienda]', e.message), 0)) : 0;
   return { revisados: hechos, quedan: vencidos.length - pendientes.length, sistema: sistema.length, miTienda, trivo };
 }
 

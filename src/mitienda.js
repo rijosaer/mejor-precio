@@ -92,10 +92,11 @@ export function resumirMercado(producto, datos) {
   return { ofertas, mediana, referencia, porUnidad, respondieron };
 }
 
-export async function analizarProducto(id, { ahora = Date.now() } = {}) {
+// `carta`: la carta ya leída (el monitoreo analiza varios a la vez sin volver a pedirla).
+export async function analizarProducto(id, { ahora = Date.now(), carta = null } = {}) {
   const config = await leerConfig();
   if (!config.miTienda) throw new TypeError('Elige tu tienda en Ajustes → Mi tienda');
-  const producto = (await catalogoPropio(config.miTienda)).find((p) => p.id === String(id));
+  const producto = (carta || (await catalogoPropio(config.miTienda))).find((p) => p.id === String(id));
   if (!producto) throw new TypeError('Ese producto ya no está en tu carta');
   if (!producto.ml) {
     const resultado = { t: ahora, consulta: producto.consulta, sinTamano: true, ofertas: [], referencia: null };
@@ -159,7 +160,8 @@ export async function refrescarMiTienda({ maximo = 4, ahora = Date.now() } = {})
     .filter((p) => p.ml && (!p.resultado || ahora - p.resultado.t > VIGENCIA_HORAS * 60 * 60_000))
     .sort((a, b) => (a.resultado?.t || 0) - (b.resultado?.t || 0))
     .slice(0, maximo);
-  for (const p of viejos) await analizarProducto(p.id, { ahora }).catch((e) => console.error('[mi tienda]', p.nombre, e.message));
+  // En paralelo: cada búsqueda tarda hasta 9 s y la función programada tiene 30 s.
+  await Promise.all(viejos.map((p) => analizarProducto(p.id, { ahora, carta: productos }).catch((e) => console.error('[mi tienda]', p.nombre, e.message))));
   return viejos.length;
 }
 
