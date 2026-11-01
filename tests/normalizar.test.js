@@ -54,7 +54,7 @@ test('coincide sin tildes y con el tamaño', () => {
 });
 
 test('separa las palabras de presentación de las de producto', () => {
-  assert.deepEqual(palabrasPresentacion('aguardiente antioqueño 750 ml six pack'), ['pack']);
+  assert.deepEqual(palabrasPresentacion('aguardiente antioqueño 750 ml six pack'), ['six', 'pack']);
   assert.deepEqual(palabrasPresentacion('cerveza aguila lata x 6'), ['lata']);
   assert.deepEqual(palabrasPresentacion('whisky black label litro'), ['litro']);
   assert.deepEqual(palabrasPresentacion('ron santafe botella'), ['botella']);
@@ -75,8 +75,10 @@ test('filtrarProductos ordena por relevancia y descarta lo que no coincide', () 
     { nombre: 'Agua purificada 600 ml', precio: 3000, ml: 600 },
   ];
   const salida = filtrarProductos(lista, palabrasClave('aguardiente antioqueño'));
-  assert.equal(salida.length, 2, 'el agua no debe aparecer en una búsqueda de aguardiente');
-  assert.ok(salida[0].nombre.includes('Antioqueño'), 'Antioqueño debe quedar primero por relevancia');
+  // "aguardiente" es palabra de categoría; "antioqueño" es la marca y es obligatoria.
+  assert.deepEqual(salida.map((p) => p.nombre), ['Aguardiente Antioqueño Real 750 ml']);
+  const todos = filtrarProductos(lista, palabrasClave('aguardiente'));
+  assert.equal(todos.length, 2, 'el agua no debe aparecer en una búsqueda de aguardiente');
 });
 
 test('el sinónimo acerca "cristal" a "cristalino"', () => {

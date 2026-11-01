@@ -1,0 +1,10 @@
+{"products": [
+  {"productName": "Aguardiente Antioqueño Tapa Roja 750 ml", "link": "/aguardiente-antioqueno-750/p", "items": [{"name": "750 ml", "ean": "7702049002177", "images": [{"imageUrl": "https://exito.vteximg.com.br/arquivos/ids/1234/antioqueno.jpg"}], "sellers": [
+    {"sellerId": "9", "sellerDefault": true, "commertialOffer": {"Price": 44000, "ListPrice": 44000, "AvailableQuantity": 0}},
+    {"sellerId": "1", "sellerDefault": false, "commertialOffer": {"Price": 45500, "ListPrice": 52000, "AvailableQuantity": 37}}
+  ]}]},
+  {"productName": "Aguardiente Antioqueño", "link": "https://www.tienda.test/antioqueno-garrafa/p", "items": [{"name": "Garrafa 1750 ml", "ean": ["", "7702049002245"], "images": [], "sellers": [
+    {"sellerId": "1", "sellerDefault": true, "commertialOffer": {"Price": 99000, "ListPrice": 99000, "AvailableQuantity": 10000}}
+  ]}]},
+  {"productName": "Producto sin precio", "items": [{"name": "x", "sellers": [{"sellerId": "1", "commertialOffer": {"Price": 0, "AvailableQuantity": 5}}]}]}
+]}

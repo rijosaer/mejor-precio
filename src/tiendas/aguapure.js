@@ -3,7 +3,7 @@
 // uno: quedan los productos con todas las palabras en su nombre o su sección
 // ("Cervezas"), y después el comparador filtra como en las demás tiendas.
 import { pedir } from '../http.js';
-import { coincide, extraerMl, extraerUnidades, palabrasClave, repararNombre, urlSegura } from '../normalizar.js';
+import { coincideBusqueda, extraerMl, extraerUnidades, palabrasClave, repararNombre, urlSegura } from '../normalizar.js';
 
 const BASE = 'https://trivo-pos.com';
 const SLUG = 'agua-pure';
@@ -30,7 +30,7 @@ export async function buscar(consulta) {
   }
 
   const palabras = palabrasClave(consulta);
-  const buscados = productos.filter((p) => coincide({ nombre: `${p.seccion} ${p.name}` }, palabras));
+  const buscados = productos.filter((p) => coincideBusqueda({ nombre: `${p.seccion} ${p.name}` }, palabras));
 
   return buscados.flatMap((p) => {
     const variantes = p.variants?.length ? p.variants : [null];

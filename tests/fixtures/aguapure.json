@@ -1,0 +1,10 @@
+{"data": {"sections": [
+  {"name": "Cervezas", "products": [
+    {"id": 1, "name": "Aguila Original 330ml", "price": "3500", "is_available": true, "stock_left": 80, "image_url": "/media/aguila.jpg", "variants": []},
+    {"id": 2, "name": "Aguila Original x 24 unidades (lata)", "price": "72000", "is_available": true, "variants": [], "active_promo": {"promo_price": "69000"}},
+    {"id": 3, "name": "Caja de Aguila Original x 330ml + Hielo", "price": "85000", "is_available": false, "variants": []}
+  ]},
+  {"name": "Licores", "products": [
+    {"id": 4, "name": "Aguardiente Antioqueño 750ml", "price": "48000", "is_available": true, "variants": [{"id": 9, "name": "Tapa azul", "price": "49000"}]}
+  ]}
+]}}

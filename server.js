@@ -26,6 +26,8 @@ const TIPOS = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.json': 'application/json; charset=utf-8',
+  '.woff2': 'font/woff2',
 };
 
 const SEGURIDAD = {
@@ -47,7 +49,7 @@ async function leerCuerpo(req) {
   let total = 0;
   for await (const parte of req) {
     total += parte.length;
-    if (total > 50_000) throw new Error('Cuerpo demasiado grande');
+    if (total > 500_000) throw new Error('Cuerpo demasiado grande');
     partes.push(parte);
   }
   return Buffer.concat(partes);

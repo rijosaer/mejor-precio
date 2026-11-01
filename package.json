@@ -1,7 +1,7 @@
 {
   "name": "mejor-precio",
   "version": "1.0.0",
-  "description": "Compara el precio de un producto en Bevgo, Dislicores, Éxito, Makro, Olímpica y Agua Pure (Valledupar).",
+  "description": "Compara el precio de un producto en Bevgo, Dislicores, Éxito, Makro, Olímpica, Agua Pure y tus proveedores (Valledupar).",
   "type": "module",
   "private": true,
   "main": "server.js",
@@ -9,12 +9,15 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "probar": "node scripts/probar.js",
-    "test": "node --test \"tests/*.test.js\""
+    "test": "node --test \"tests/*.test.js\"",
+    "claves-push": "node scripts/claves-push.js",
+    "prueba-local": "node scripts/servidor-prueba.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "@netlify/blobs": "^8.2.0"
+    "@netlify/blobs": "^8.2.0",
+    "web-push": "^3.6.7"
   }
 }

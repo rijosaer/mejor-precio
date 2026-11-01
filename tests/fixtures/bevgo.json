@@ -1,0 +1,4 @@
+[
+  {"name": "Aguardiente Antioque&#241;o Tapa Roja 750 ml", "permalink": "https://bevgo.com.co/producto/antioqueno-750/", "prices": {"price": "4590000", "regular_price": "4990000", "currency_minor_unit": 2}, "is_in_stock": true, "is_purchasable": true, "low_stock_remaining": 4, "images": [{"thumbnail": "https://bevgo.com.co/wp-content/uploads/antioqueno-300x300.jpg"}]},
+  {"name": "Cerveza Águila Lata 330 ml x6", "permalink": "https://bevgo.com.co/producto/aguila-six/", "prices": {"price": "1890000", "regular_price": "1890000", "currency_minor_unit": 2}, "is_in_stock": false, "is_purchasable": true, "low_stock_remaining": null, "images": []}
+]
