@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#eef0f3">
-  <meta name="description" content="Compara el precio de un producto en Bevgo, Dislicores, Éxito, Makro, Olímpica y Agua Pure.">
+  <meta name="description" content="Compara el precio de un producto en Bevgo, Dislicores, Éxito, Makro, Olímpica, Agua Pure y tus proveedores.">
   <title>Mejor Precio</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -18,14 +18,17 @@
       <img src="icons/icon-192.png" alt="" width="28" height="28">
       <div>
         <h1>Mejor Precio</h1>
-        <p>Bevgo · Dislicores · Éxito · Makro · Olímpica · Agua Pure</p>
+        <p>Bevgo · Dislicores · Éxito · Makro · Olímpica · Agua Pure · tus proveedores</p>
       </div>
     </a>
     <div class="acciones">
       <button id="abrir-tutorial" class="boton-texto" type="button">Cómo funciona</button>
-      <button id="abrir-lista" class="boton-texto" type="button" hidden>Mi lista</button>
-      <button id="abrir-catalogo" class="boton-texto" type="button" hidden>Catálogo</button>
-      <button id="abrir-ajustes" class="boton-texto" type="button" hidden>Ajustes</button>
+      <button id="abrir-lista" class="boton-texto" type="button" data-vista="lista" hidden>Mi lista</button>
+      <button id="abrir-pedido" class="boton-texto" type="button" data-vista="pedido" hidden>Pedido</button>
+      <button id="abrir-catalogo" class="boton-texto" type="button" data-vista="catalogo" hidden>Catálogo</button>
+      <button id="abrir-ventas" class="boton-texto" type="button" data-vista="ventas" hidden>Ventas</button>
+      <button id="abrir-proveedores" class="boton-texto" type="button" data-vista="proveedores" hidden>Proveedores</button>
+      <button id="abrir-ajustes" class="boton-texto" type="button" data-vista="ajustes" hidden>Ajustes</button>
       <button id="salir" class="boton-texto" type="button" hidden>Salir</button>
     </div>
   </header>
@@ -52,7 +55,8 @@
     <section id="vista-buscar" hidden>
       <form id="form-buscar" class="buscador" role="search">
         <input id="q" name="q" type="search" inputmode="search" enterkeyhint="search"
-               placeholder="Ej: aguardiente antioqueño 750" autocomplete="off" minlength="2" maxlength="80" required>
+               placeholder="Ej: aguardiente antioqueño 750" autocomplete="off" minlength="2" maxlength="80" required list="sugerencias">
+        <datalist id="sugerencias"></datalist>
         <button id="escanear" class="boton-texto boton-escanear" type="button" hidden aria-label="Escanear código de barras">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         </button>
@@ -93,9 +97,134 @@
       </div>
       <div id="cat-estado" class="estado" aria-live="polite"></div>
       <div id="cat-items" class="cat-items"></div>
-      <p class="nota">El CSV trae tu precio, el sugerido y el estado (activo o pausar) para subirlo a tu tienda. Los productos se revisan solos cada 6 horas.</p>
+      <p class="nota">El CSV trae tu precio, el sugerido, el estado (activo o pausar) y el inventario para subirlo a tu tienda. Los productos se revisan solos según la frecuencia de Ajustes → Monitoreo.</p>
+    </section>
+
+    <!-- Mi pedido -->
+    <section id="vista-pedido" hidden>
+      <h2>Mi pedido</h2>
+      <p class="ayuda">Junta varios productos con «Agregar al pedido» y la app te dice en qué tiendas comprarlos para pagar menos en total, contando el envío, el envío gratis y el pedido mínimo de cada una (Ajustes → Envío por tienda).</p>
+      <div id="pedido-items" class="lista-items"></div>
+      <div class="cat-acciones">
+        <button id="pedido-actualizar" class="boton-texto" type="button">Actualizar precios</button>
+        <button id="pedido-vaciar" class="boton-texto" type="button">Vaciar</button>
+      </div>
+      <div id="pedido-estado" class="estado" aria-live="polite"></div>
+      <div id="pedido-plan"></div>
+    </section>
+
+    <!-- Ventas -->
+    <section id="vista-ventas" hidden>
+      <h2>Ventas</h2>
+      <p class="ayuda">Lo que registras en Catálogo con «Compré», «Vendí» y «Contar»: ganancia de cada mes, los productos que más rotan y el valor de tu inventario.</p>
+      <div class="cat-acciones">
+        <button id="ventas-exportar" class="boton-texto" type="button">Exportar CSV</button>
+      </div>
+      <div id="ventas-contenido"></div>
+    </section>
+
+    <!-- Proveedores propios -->
+    <section id="vista-proveedores" hidden>
+      <h2>Proveedores</h2>
+      <p class="ayuda">Distribuidores sin página web cuyos precios conoces. Sus productos aparecen en cada búsqueda junto a las tiendas, con historial, avisos y Mi pedido.</p>
+      <div class="cat-acciones">
+        <button id="prov-nuevo" class="boton" type="button">Nuevo proveedor</button>
+        <button id="prov-plantilla" class="boton-texto" type="button">Bajar plantilla CSV</button>
+      </div>
+      <p id="prov-estado" class="ayuda" role="status"></p>
+      <div id="prov-lista" class="lista-items"></div>
+
+      <div id="prov-editor" class="tarjeta prov-editor" hidden>
+        <div class="rejilla">
+          <label>Nombre del proveedor
+            <input id="prov-nombre" maxlength="40" placeholder="Ej: Distribuidora Don José">
+          </label>
+          <label>Contacto (opcional)
+            <input id="prov-contacto" maxlength="80" placeholder="Teléfono o WhatsApp">
+          </label>
+          <label>Cómo vende (opcional)
+            <input id="prov-alcance" maxlength="60" placeholder="Ej: Al por mayor · entrega en Valledupar">
+          </label>
+        </div>
+        <label class="opciones"><input type="checkbox" id="prov-activo"> Incluir en las búsquedas</label>
+
+        <fieldset class="aj-seccion">
+          <legend>Importar precios</legend>
+          <p class="ayuda">Un CSV con columnas <code>nombre</code> y <code>precio</code> (y si quieres <code>ml</code>, <code>unidades</code>, <code>ean</code>, <code>disponible</code>). En Excel o Google Sheets: Archivo → Descargar o Guardar como → CSV. También puedes pegar la lista que te mandan por WhatsApp o copiar las celdas de Excel.</p>
+          <div class="prov-importar">
+            <label class="boton-texto boton-archivo">Elegir archivo CSV
+              <input id="prov-archivo" type="file" accept=".csv,.txt,text/csv,text/plain">
+            </label>
+            <label class="opciones"><input type="checkbox" id="prov-reemplazar"> Reemplazar todos los productos (si no, se actualizan los que ya están)</label>
+          </div>
+          <textarea id="prov-pegar" rows="4" placeholder="Pega aquí la lista, una línea por producto:&#10;Antioqueño 750 ml $41.500&#10;Águila lata x24 62.000"></textarea>
+          <button id="prov-leer-pegado" class="boton-texto" type="button">Leer lo pegado</button>
+        </fieldset>
+
+        <fieldset class="aj-seccion">
+          <legend>Productos <span id="prov-cuenta" class="ayuda"></span></legend>
+          <form id="form-prov-producto" class="prov-agregar">
+            <input id="prov-p-nombre" placeholder="Producto (con el tamaño: 750 ml)" required minlength="2" maxlength="140" aria-label="Producto">
+            <input id="prov-p-precio" type="number" inputmode="numeric" min="0" step="100" placeholder="Precio" required aria-label="Precio">
+            <input id="prov-p-ml" type="number" inputmode="numeric" min="0" placeholder="ml (opcional)" aria-label="Mililitros">
+            <input id="prov-p-unidades" type="number" inputmode="numeric" min="1" max="60" placeholder="unidades" aria-label="Unidades por empaque">
+            <button class="boton" type="submit">Agregar</button>
+          </form>
+          <div id="prov-productos" class="prov-productos"></div>
+        </fieldset>
+
+        <div class="ajustes-acciones">
+          <button id="prov-guardar" class="boton" type="button">Guardar</button>
+          <button id="prov-cancelar" class="boton-texto" type="button">Cancelar</button>
+          <button id="prov-exportar" class="boton-texto" type="button">Exportar CSV</button>
+          <button id="prov-borrar" class="boton-texto peligro" type="button">Borrar proveedor</button>
+          <p id="prov-mensaje" class="ayuda" role="status"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Estado de las tiendas -->
+    <section id="vista-estado" hidden>
+      <div class="ajustes-cabeza">
+        <h2>Estado de las tiendas</h2>
+        <button class="boton-texto" type="button" data-volver>Volver</button>
+      </div>
+      <button id="estado-probar" class="boton-texto" type="button">Probar ahora</button>
+      <div id="estado-contenido"></div>
     </section>
   </main>
+
+  <!-- Ficha del producto -->
+  <dialog id="ficha" class="ficha" aria-label="Ficha del producto">
+    <button id="ficha-cerrar" class="tutorial-cerrar" type="button" aria-label="Cerrar">
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <path d="M3 3l10 10M13 3L3 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+      </svg>
+    </button>
+    <div id="ficha-cuerpo" class="ficha-cuerpo"></div>
+  </dialog>
+
+  <p id="aviso-flotante" class="aviso-flotante" role="status" hidden></p>
+
+  <!-- Una versión nueva se instaló mientras la app estaba abierta -->
+  <div id="nueva-version" class="nueva-version" role="status" hidden>
+    <span>Hay una versión nueva de la app.</span>
+    <button id="nueva-version-recargar" class="mini activo" type="button">Actualizar</button>
+  </div>
+
+  <!-- Novedades -->
+  <dialog id="novedades" class="ficha novedades" aria-label="Nuevas actualizaciones">
+    <button id="novedades-cerrar" class="tutorial-cerrar" type="button" aria-label="Cerrar">
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <path d="M3 3l10 10M13 3L3 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+      </svg>
+    </button>
+    <div id="novedades-cuerpo" class="ficha-cuerpo"></div>
+  </dialog>
+
+  <footer class="pie">
+    <button id="ver-novedades" class="enlace-boton pie-version" type="button">Novedades</button>
+  </footer>
 
   <!-- Escáner de código de barras -->
   <div id="escaner" class="escaner" hidden role="dialog" aria-modal="true" aria-label="Escanear código de barras">
@@ -135,6 +264,22 @@
       <h2>Ajustes</h2>
       <button id="aj-volver" class="boton-texto" type="button">Volver</button>
     </div>
+
+    <fieldset class="aj-seccion">
+      <legend>Tiendas</legend>
+      <p class="ayuda">Las que se consultan en cada búsqueda y en el monitoreo de Mi lista. Menos tiendas, búsquedas más rápidas.</p>
+      <div id="aj-tiendas" class="aj-tiendas"></div>
+      <div class="aj-botones">
+        <button id="aj-proveedores" class="boton-texto" type="button">Mis proveedores</button>
+        <button id="aj-estado-tiendas" class="boton-texto" type="button">Estado de las tiendas</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="aj-seccion">
+      <legend>Envío por tienda</legend>
+      <p class="ayuda">Cómo te llega el producto de cada tienda. Se usa al ordenar por «precio + envío o traslado» y en Mi pedido. «Lo recojo» usa la distancia de Logística.</p>
+      <div id="aj-envios" class="aj-envios"></div>
+    </fieldset>
 
     <fieldset class="aj-seccion">
       <legend>Margen neto</legend>
@@ -182,6 +327,89 @@
       <legend>Puntos y cashback</legend>
       <p class="ayuda">Porcentaje que cada tienda te devuelve en puntos o cashback. Se suma al margen.</p>
       <div id="aj-cashback" class="rejilla"></div>
+    </fieldset>
+
+    <fieldset class="aj-seccion">
+      <legend>Resultados</legend>
+      <div class="rejilla">
+        <label>Presentaciones que van primero
+          <input id="aj-favoritas" placeholder="Ej: 750, 1000, 6x330">
+        </label>
+        <label>Ordenar al abrir por
+          <select id="aj-orden">
+            <option value="precio">precio de compra</option>
+            <option value="total">precio + envío o traslado</option>
+            <option value="litro">precio por litro</option>
+          </select>
+        </label>
+        <label>«Oferta» desde (% de descuento)
+          <input id="aj-oferta" type="number" inputmode="decimal" min="1" max="90" step="1">
+        </label>
+        <label>«Liquidación» desde (%)
+          <input id="aj-liquidacion" type="number" inputmode="decimal" min="1" max="95" step="1">
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset class="aj-seccion">
+      <legend>Monitoreo de Mi lista</legend>
+      <p class="ayuda">Lo hace el servidor aunque nadie abra la app. Vale para las dos personas que la usan.</p>
+      <div class="rejilla">
+        <label>Revisar cada
+          <select id="aj-mon-horas">
+            <option value="3">3 horas</option>
+            <option value="6">6 horas</option>
+            <option value="12">12 horas</option>
+            <option value="24">24 horas</option>
+          </select>
+        </label>
+        <label>Silencio desde (hora)
+          <input id="aj-mon-desde" type="number" inputmode="numeric" min="0" max="23" step="1">
+        </label>
+        <label>hasta (hora)
+          <input id="aj-mon-hasta" type="number" inputmode="numeric" min="0" max="23" step="1">
+        </label>
+      </div>
+      <label class="opciones"><input type="checkbox" id="aj-mon-silencio"> No mandar notificaciones en ese horario (llegan juntas al terminar)</label>
+      <label class="opciones"><input type="checkbox" id="aj-mon-semanal"> Resumen semanal los lunes: qué bajó y qué subió</label>
+    </fieldset>
+
+    <fieldset class="aj-seccion">
+      <legend>Notificaciones</legend>
+      <div id="aj-push"></div>
+    </fieldset>
+
+    <fieldset class="aj-seccion">
+      <legend>Apariencia</legend>
+      <div class="rejilla">
+        <label>Tema
+          <select id="aj-tema">
+            <option value="auto">Como el teléfono</option>
+            <option value="claro">Claro</option>
+            <option value="oscuro">Oscuro</option>
+          </select>
+        </label>
+        <label>Tamaño de letra
+          <select id="aj-letra">
+            <option value="90">Pequeña</option>
+            <option value="100">Normal</option>
+            <option value="112">Grande</option>
+            <option value="125">Muy grande</option>
+          </select>
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset class="aj-seccion">
+      <legend>Respaldo</legend>
+      <p class="ayuda">Baja en un archivo todo lo que la app guarda en este teléfono (historial, ajustes, pedido, márgenes) para recuperarlo en otro. Mi lista, el inventario y los proveedores ya viven en el servidor.</p>
+      <div class="aj-botones">
+        <button id="aj-respaldo-bajar" class="boton-texto" type="button">Bajar respaldo</button>
+        <label class="boton-texto boton-archivo">Recuperar desde archivo
+          <input id="aj-respaldo-archivo" type="file" accept=".json,application/json">
+        </label>
+      </div>
+      <p id="aj-respaldo-texto" class="ayuda" role="status"></p>
     </fieldset>
 
     <div class="ajustes-acciones">

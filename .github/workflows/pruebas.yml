@@ -1,0 +1,22 @@
+name: Pruebas
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: Revisar sintaxis
+        run: for f in server.js src/*.js src/tiendas/*.js public/*.js scripts/*.js; do node --check "$f"; done
+      - run: npm test

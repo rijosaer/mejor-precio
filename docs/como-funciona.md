@@ -113,21 +113,33 @@ El cashback es un porcentaje por tienda (por ejemplo 2 % en Rappi) que se suma a
 
 ```
 mejor-precio/
-├─ server.js               Servidor local/Railway: estáticos + API + sesión
-├─ netlify/functions/api.mjs  Misma API para Netlify
-├─ api.js                  Enrutador de la API (entrar, tiendas, buscar)
-├─ comparador.js           Orquesta las seis lectoras en paralelo
-├─ tiendas/                Una lectora por tienda (bevgo, dislicores, exito, makro, olimpica, aguapure)
+├─ server.js                 Servidor local/Railway: estáticos + API + monitoreo cada hora
+├─ netlify/functions/        api.mjs (la API) y monitor.mjs (función programada cada hora)
+├─ src/
+│  ├─ api.js                 Rutas /api/*: sesión, búsqueda, lista, push, inventario, proveedores…
+│  ├─ comparador.js          Consulta las tiendas en paralelo, caché por tienda, estadísticas
+│  ├─ normalizar.js          Tamaños, unidades, grados, coincidencia de palabras, variantes, firma
+│  ├─ tiendas/               Una lectora por tienda (+ vtex.js para Carulla y Jumbo)
+│  ├─ proveedores.js         Proveedores propios (sin página web)
+│  ├─ monitor.js             Mi lista, revisión programada, avisos, salud de tiendas, resumen semanal
+│  ├─ config.js              Frecuencia, tiendas y silencio del monitoreo; ajustes compartidos
+│  ├─ push.js                Notificaciones push (Web Push)
+│  ├─ inventario.js          Compras, ventas y conteos
+│  └─ almacen.js             Netlify Blobs o archivos en datos/; `actualizar` sin pisarse
 └─ public/
-   ├─ index.html           Estructura y plantillas de fila/grupo
-   ├─ styles.css           Todo el diseño
-   ├─ app.js               Interfaz: resultados, paneles, ajustes
-   ├─ datos.js             Toda la lógica de cliente (historial, alertas, margen, logística)
-   ├─ sw.js                Service worker: la app funciona sin conexión
-   └─ fuentes/             Tipografía autoalojada
+   ├─ index.html · styles.css  Estructura, plantillas y diseño (claro y oscuro)
+   ├─ app.js                 Arranque, navegación, búsqueda y autocompletar
+   ├─ resultados.js          Grupos, filas con foto, ficha, filtros, avisos, precio por litro
+   ├─ lista.js · catalogo.js · pedido.js · ventas.js · proveedores.js · ajustes.js · estado.js
+   ├─ escaner.js             Código de barras (detector del navegador o ZXing en vendor/)
+   ├─ sync.js                Lo que se copia del servidor (lista, ajustes, movimientos, tiendas)
+   ├─ datos.js · reglas.js   Historial, alertas, margen, logística, envíos, precio sugerido
+   ├─ optimizar.js · csv.js · inventario.js   Funciones puras (con tests)
+   ├─ util.js                Utilidades comunes
+   └─ sw.js                  Service worker: funciona sin conexión y recibe notificaciones
 ```
 
-**Importante:** todo lo de los puntos 2, 3 y 4 vive **solo en tu navegador**, en `localStorage`. Por eso funciona igual en local, en Railway y en Netlify sin tocar el servidor, y por eso tus alertas y tu historial no se comparten con nadie más.
+El historial, los avisos y los ajustes viven en el navegador (`localStorage`), pero ya no solo ahí: el servidor guarda el historial de cada búsqueda (`consulta/<id>`) y lo devuelve con los resultados, Mi lista y su monitoreo, una copia de los ajustes (gana el más reciente), el inventario y los proveedores. Así las dos personas ven lo mismo y nada se pierde al borrar los datos del teléfono. Además, **Ajustes → Respaldo** baja todo lo del navegador en un archivo.
 
 ### Claves de `localStorage`
 
@@ -138,7 +150,12 @@ mejor-precio/
 | `mp-ajustes` | `{ margen: {…}, logistica: {…}, cashback: {…} }` |
 | `mp-venta` | Valores del panel de margen, por producto |
 | `mp-recientes` | Últimas 8 búsquedas (los chips) |
-| `mp-orden` | `precio` o `total` |
+| `mp-orden` | `precio`, `total` (precio + envío o traslado) o `litro` |
+| `mp-filtros` | `{ soloOfertas, min, max, ocultas: [tiendas] }` |
+| `mp-variantes` | `true` para mostrar también las variantes que no se escribieron |
+| `mp-pedido` | Productos de Mi pedido con sus ofertas por tienda |
+| `mp-nombres` | Nombres vistos para autocompletar |
+| `mp-movimientos` · `mp-proveedores` · `mp-tiendas` · `mp-config` | Copias de lo que vive en el servidor |
 | `mp-solo-disponibles` | `true` / `false` |
 
 ---
@@ -165,7 +182,8 @@ mejor-precio/
 Al recargar verás el chip de la fila y la gráfica. Si vuelves a buscar, se genera la alerta de punto dulce.
 3. **Margen:** botón *Margen* → escribe un precio de venta y mira las tres líneas de salida.
 4. **Logística:** Ajustes → Logística → pega tu ubicación y la de Makro (o dos enlaces de Maps) → *Guardar* → activa *precio + traslado* en el orden.
-5. **Automatizado:** `npm test` cubre `datos.js` (historial, alertas, margen, distancias).
+5. **Sin internet:** `npm run prueba-local` levanta la app con respuestas de ejemplo de cada tienda (`tests/fixtures/`) en `http://localhost:3000`, contraseña `prueba`.
+6. **Automatizado:** `npm test` cubre la lectura de cada tienda con respuestas guardadas, la precisión de la búsqueda, la API (sesión, límites, proveedores, inventario), el monitoreo, el pedido, el CSV y la lógica del navegador. GitHub Actions lo corre en cada push (`.github/workflows/pruebas.yml`).
 
 ---
 
@@ -177,7 +195,9 @@ Al recargar verás el chip de la fila y la gráfica. Si vuelves a buscar, se gen
 
 La lista se guarda en el servidor (`PUT /api/lista`). La función programada corre cada hora y revisa hasta 6 productos que lleven 6 horas o más sin revisarse (de 3 en 3; la función tiene 30 s). Una búsqueda manual de un producto de la lista cuenta como revisión. Por cada producto se guardan hasta 12 resultados por tienda, con un punto cada 3 horas como máximo: `t` fecha, `p` precio, `d` disponible y, si la tienda los da, `s` stock, `a` precio tachado y `n` nota de la oferta. Al abrir la app, `GET /api/monitoreo?desde=<última sincronización>` trae los puntos y avisos nuevos y `fusionarServidor` los suma al historial del navegador.
 
-Almacenamiento (Netlify Blobs, almacén `mejor-precio`): `lista`, `estado` (última revisión por producto), `alertas` (60 más recientes) y `serie/<id>` (historial, avisos ya enviados y resumen del mercado de cada producto).
+Almacenamiento (Netlify Blobs, almacén `mejor-precio`): `lista`, `serie/<id>` (historial, última revisión, avisos ya enviados y resumen del mercado de cada producto), `alertas/<id>` (30 más recientes por producto) y `alertas/_sistema` (tiendas caídas, resumen semanal). Cada producto tiene sus propias claves para que una búsqueda a mano y la revisión programada no se pisen; dentro de un mismo proceso, `actualizar()` de `almacen.js` además pone en fila las escrituras de una misma clave. Los documentos viejos `estado` y `alertas` se reparten solos la primera vez. Otras claves: `config`, `ajustes`, `push`, `push-pendientes`, `salud`, `semanal`, `movimientos`, `proveedores`, `consulta/<id>` e `intentos`.
+
+La frecuencia (3, 6, 12 o 24 horas) y las tiendas que se revisan se eligen en **Ajustes**.
 
 ### Avisos
 
@@ -189,6 +209,10 @@ Almacenamiento (Netlify Blobs, almacén `mejor-precio`): `lista`, `estado` (últ
 | `agotado` / `volvio` | Cambia la disponibilidad entre dos lecturas. |
 | `oferta` | Aparece un precio tachado o una nota de oferta que antes no estaba. |
 | `sinstock` | Al menos 3 tiendas respondieron y ninguna tiene disponible el producto exacto. |
+| `tienda` | La búsqueda de control diaria («aguila») falla o no devuelve productos en una tienda dos días seguidos. |
+| `semanal` | Los lunes desde las 8 a. m.: qué productos de la lista bajaron o subieron frente a hace una semana. |
+
+Con las claves VAPID configuradas, los avisos llegan como notificación push. Con más de 3 a la vez llega una sola que los resume; en el horario de silencio se guardan y salen en la siguiente revisión.
 
 Los de stock y condiciones se calculan para los 3 resultados más relevantes de cada tienda. Un aviso descartado no vuelve hasta que el precio baje más (punto dulce) o haya un evento nuevo. Los costos de envío, los tiempos de entrega y los cupones de cada tienda no se pueden vigilar: no salen en las búsquedas públicas, solo al pagar.
 
@@ -216,6 +240,51 @@ Si la búsqueda es un número de 8 a 14 dígitos, Dislicores, Éxito y Olímpica
 
 **¿Por qué la alerta no aparece al abrir la página?** Porque se genera al registrar una búsqueda. Se muestra en la búsqueda siguiente.
 
-**¿Se pierde mi historial si borro los datos del navegador?** Sí. No está en ningún servidor. Si cambias de dispositivo empiezas de cero.
+**¿Se pierde mi historial si borro los datos del navegador?** Ya no del todo: el servidor guarda el historial de cada búsqueda y de Mi lista, y lo devuelve al volver a buscar. Para lo demás (márgenes, pedido, avisos descartados) usa **Ajustes → Respaldo**.
 
-**¿Puedo añadir otra tienda?** Crea `src/tiendas/mi-tienda.js` con `tienda` y `buscar`, y agrégala al arreglo `TIENDAS` de `src/comparador.js`, a `app.js` y a la cabecera de `index.html`.
+**¿Puedo añadir otra tienda?** Si es VTEX (como Carulla o Jumbo), basta con `tiendaVtex({ id, nombre, web })` de `src/tiendas/vtex.js`. Si no, crea `src/tiendas/mi-tienda.js` con `tienda` y `buscar`, agrégala al arreglo `TIENDAS` de `src/comparador.js` y suma una respuesta de ejemplo en `tests/fixtures/` con su test en `tests/tiendas.test.js`. Si la tienda no tiene página, créala como **proveedor propio**.
+
+---
+
+## 9. Búsqueda precisa
+
+**Archivo:** `src/normalizar.js` · **Tests:** `tests/precision.test.js`
+
+- **Palabra por palabra.** «ron» ya no encuentra «toronja». Una palabra coincide si es igual, es su plural, una es abreviatura de la otra («aguardient», «antioq», «cristal» → «cristalino»), es sinónimo (`SINONIMOS`) o, con 6 letras o más, solo cambia una letra o dos letras se cruzaron («buchanas», «jhonnie»).
+- **Marcas obligatorias.** Todas las palabras propias (marca, variante, color, tamaño) tienen que estar. Las de categoría (`GENERICAS`: whisky, ron, aguardiente, cerveza…) son opcionales porque muchas tiendas no las escriben. Por eso «johnnie walker black» ya no trae el Red Label.
+- **Variantes no pedidas.** Zero, sin azúcar, light, tapa azul, sabores, reserva, añejo… (`VARIANTES`). Si hay productos sin variante, los que la tienen se marcan `otraVariante` y se ocultan con la nota «N productos son otras variantes · Mostrarlas». La tapa roja es el Antioqueño de siempre y no cuenta. El monitoreo no usa variantes para el precio objetivo.
+- **¿Quisiste decir?** Si una palabra no aparece en ningún nombre, se propone la más parecida entre lo que devolvieron los buscadores de las tiendas (que toleran errores).
+- **Mismo producto.** Se unen los que comparten código de barras o **firma** (palabras propias del nombre + ml + unidades + grados): «Mismo producto en N tiendas».
+- **Grados** (29°, 40 % vol) en la fila y en la firma.
+- **Fotos**: cada tienda trae su foto; para la lista se pide una miniatura (VTEX en la ruta, Shopify con `width`). Tocar la foto abre la ficha con la imagen grande, la presentación en cada tienda y el historial.
+
+## 10. Proveedores propios
+
+**Archivos:** `src/proveedores.js`, `public/proveedores.js`, `public/csv.js`
+
+Distribuidores sin página web. Se crean en **Proveedores**: a mano, importando un CSV (Excel o Google Sheets → Descargar como CSV; columnas `nombre` y `precio`, y si quieres `ml`, `unidades`, `ean`, `disponible`), o pegando la lista de WhatsApp («Antioqueño 750 ml $41.500», una línea por producto) o celdas copiadas de Excel. Cada proveedor activo entra a la búsqueda como una tienda más (`prov-<id>`): mismo filtro de palabras, historial, avisos, Mi lista, Catálogo y Pedido. Su lista nunca sale de la caché, así que un cambio de precio se ve en la búsqueda siguiente. Hasta 20 proveedores de 1.500 productos.
+
+## 11. Mi pedido
+
+**Archivos:** `public/pedido.js`, `public/optimizar.js` · **Tests:** `tests/pedido.test.js`
+
+«Agregar al pedido» guarda la presentación con el precio de cada tienda. La app prueba todas las combinaciones de tiendas (hasta 12) y en cada una manda cada producto a la más barata; suma el envío de cada tienda usada (Ajustes → Envío por tienda: costo, gratis desde, pedido mínimo; o «Lo recojo» con el traslado por km) y descarta las combinaciones que no alcanzan un pedido mínimo. Gana la de menor total y se compara contra comprar todo en una sola tienda.
+
+## 12. Inventario y ventas
+
+**Archivos:** `src/inventario.js`, `public/inventario.js`, `public/ventas.js`
+
+En Catálogo, cada producto que vendes tiene «Compré», «Vendí» y «Contar». El inventario no se guarda: se calcula de los movimientos (`inventarioDe`), con costo promedio ponderado de las compras. Cada venta guarda el costo promedio de ese momento, así la ganancia del mes no cambia si después compras más caro. «Avisar con (u.)» marca los productos con pocas unidades. **Ventas** muestra ingresos y ganancia por mes, los que más rotan en 30 días y el valor del inventario; todo se exporta en CSV.
+
+## 13. Notificaciones push
+
+1. `npm run claves-push` imprime las claves.
+2. Ponlas en el servidor: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` (`mailto:tu@correo.com`).
+3. En cada teléfono: **Ajustes → Notificaciones → Activar**. En iPhone, primero instala la app en la pantalla de inicio (iOS 16.4 o más).
+
+## 14. Seguridad
+
+- La firma de la cookie incluye un resumen de `APP_PASSWORD`: **cambiar la contraseña cierra todas las sesiones**.
+- 10 intentos fallidos cada 15 minutos por IP, contados también en Netlify Blobs (vale para todas las instancias).
+- Las rutas que cambian datos exigen `content-type: application/json`, que un formulario de otro sitio no puede mandar.
+- El service worker solo guarda respuestas correctas: un error nunca reemplaza la copia buena.
