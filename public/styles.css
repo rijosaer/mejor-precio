@@ -1448,3 +1448,4 @@ textarea:focus { border-color: var(--tinta); outline: none; }
 .mt-propuesta-precio { text-align: right; white-space: nowrap; }
 .mt-cambio { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--linea); }
 #mt-historial-caja { margin-top: 10px; }
+.aj-subtitulo { margin: 16px 0 4px; font-size: 0.95rem; }

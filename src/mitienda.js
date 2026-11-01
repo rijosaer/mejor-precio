@@ -268,7 +268,13 @@ export async function sincronizarTrivo({ ahora = Date.now(), dias = 30 } = {}) {
   try {
     datos = await leerTrivo({ ahora, dias });
   } catch (error) {
+    const previo = await leer('mitienda-trivo');
     await actualizar('mitienda-trivo', (actual) => ({ ...(actual || {}), error: error.message, tError: ahora }));
+    // Se avisa una vez cuando deja de responder, no en cada intento.
+    if (!previo?.error) {
+      const aviso = { tipo: 'trivo', title: 'TRIVO no está respondiendo', body: `${error.message}. Los costos, existencias y precios por compra esperan hasta que vuelva.`, url: '/#mitienda', t: ahora };
+      await notificarAvisos([aviso], { ahora }).catch((e) => console.error('[push]', e.message));
+    }
     // Un fallo de red («fetch failed») es TypeError: no es un error de quien llama.
     throw new Error(error.message);
   }
@@ -281,14 +287,53 @@ export async function sincronizarTrivo({ ahora = Date.now(), dias = 30 } = {}) {
   // null = no hay compras; si no se pudieron leer, se queda la marca anterior.
   const ultimaCompra = datos.compras === null ? anterior?.ultimaCompra : datos.compras.length ? Math.max(...datos.compras.map((c) => Number(c.id))) : null;
   const cambios = anterior?.t ? cambiosPorCompra(carta, productos, anterior, datos.compras) : {};
+  // Lo que pide atención: bajo el mínimo y bajo el costo (se avisa al aparecer).
+  for (const p of carta) {
+    const x = productos[p.id];
+    x.bajoCosto = x.costo > 0 && p.precio > 0 && p.precio < x.costo;
+  }
   const doc = { t: ahora, desde: datos.desde, hasta: datos.hasta, dias, productos, sinPareja, ultimaCompra, error: null };
   await actualizar('mitienda-trivo', () => doc);
   const nuevas = Object.keys(cambios).length ? await proponerPrecios({ carta, trivo: doc, cambios, ahora }) : [];
+  const avisos = [];
   if (nuevas.length) {
-    const aviso = { tipo: 'precio-compra', title: `Compra en TRIVO: ${nuevas.length} ${nuevas.length === 1 ? 'precio' : 'precios'} para aprobar`, body: nuevas.slice(0, 3).map((x) => `${x.nombre}: ${x.precioActual} → ${x.precioNuevo}`).join(' · '), url: '/#mitienda', t: ahora };
-    await notificarAvisos([aviso], { ahora }).catch((e) => console.error('[push]', e.message));
+    avisos.push({ tipo: 'precio-compra', title: `Compra en TRIVO: ${nuevas.length} ${nuevas.length === 1 ? 'precio' : 'precios'} para aprobar`, body: nuevas.slice(0, 3).map((x) => `${x.nombre}: ${pesosTexto(x.precioActual)} → ${pesosTexto(x.precioNuevo)}`).join(' · '), url: '/#mitienda', t: ahora });
   }
+  avisos.push(...avisosDeAtencion(carta, productos, anterior, ahora));
+  if (anterior?.error) avisos.push({ tipo: 'trivo', title: 'TRIVO volvió a responder', body: 'Costos, existencias y ventas al día.', url: '/#mitienda', t: ahora });
+  if (avisos.length) await notificarAvisos(avisos, { ahora }).catch((e) => console.error('[push]', e.message));
   return { ...doc, costos, conCosto: Object.keys(reales).length, propuestasNuevas: nuevas.length };
+}
+
+const pesosTexto = (n) => `$${Math.round(n).toLocaleString('es-CO')}`;
+
+// Avisos de lo que pide atención en TRIVO, solo cuando aparece: un producto que
+// baja del mínimo de existencias o un precio que queda por debajo del costo.
+export function avisosDeAtencion(carta, productos, anterior, ahora = Date.now()) {
+  const avisos = [];
+  for (const p of carta) {
+    const x = productos[p.id];
+    const antes = anterior?.productos?.[p.id];
+    if (x?.fuente === 'directo' && x.bajo && !antes?.bajo && x.existencias !== null) {
+      avisos.push({ tipo: 'bajo-minimo', clave: p.id, nombre: p.nombre, existencias: x.existencias, minimo: x.minimo ?? 0, url: '/#mitienda', t: ahora });
+    }
+    if (x?.bajoCosto && !antes?.bajoCosto) {
+      avisos.push({ tipo: 'bajo-costo', clave: p.id, nombre: p.nombre, precio: p.precio, costo: x.costo, url: '/#mitienda', t: ahora });
+    }
+  }
+  return avisos;
+}
+
+// Recordatorio de los precios sin aprobar: una vez al día, si hay alguno de más de 20 horas.
+export async function recordarPropuestas({ ahora = Date.now() } = {}) {
+  const viejas = (await leerPropuestas()).filter((x) => ahora - x.t > 20 * 60 * 60_000);
+  if (!viejas.length) return false;
+  const ultimo = (await leer('mitienda-recordatorio'))?.t || 0;
+  if (ahora - ultimo < 23 * 60 * 60_000) return false;
+  await actualizar('mitienda-recordatorio', () => ({ t: ahora }));
+  const total = (await leerPropuestas()).length;
+  await notificarAvisos([{ tipo: 'recordatorio', title: `${total} ${total === 1 ? 'precio espera' : 'precios esperan'} tu aprobación`, body: viejas.slice(0, 3).map((x) => `${x.nombre}: ${pesosTexto(x.precioActual)} → ${pesosTexto(x.precioNuevo)}`).join(' · '), url: '/#mitienda', t: ahora }], { ahora });
+  return true;
 }
 
 // Para el monitoreo: vuelve a leer TRIVO cada hora (así una compra cargada se nota pronto).
@@ -298,6 +343,7 @@ export async function refrescarTrivo({ ahora = Date.now() } = {}) {
   if (config.miTienda !== 'aguapure') return false;
   const doc = await leer('mitienda-trivo');
   const ultimo = Math.max(doc?.t || 0, doc?.tError || 0);
+  await recordarPropuestas({ ahora }).catch((e) => console.error('[recordatorio]', e.message));
   if (ahora - ultimo < VIGENCIA_TRIVO_HORAS * 60 * 60_000) return false;
   await sincronizarTrivo({ ahora });
   return true;

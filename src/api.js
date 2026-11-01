@@ -8,7 +8,8 @@ import { borrarMovimiento, leerMovimientos, registrarMovimiento } from './invent
 import { guardarLista, leerLista, novedades, registrarBusqueda, revisarSalud } from './monitor.js';
 import { analizarProducto, aplicarPropuesta, descartarPropuesta, deshacerCambio, estadoMiTienda, guardarCostos, guardarMargenes, proponerTodos, sincronizarTrivo } from './mitienda.js';
 import { borrarProveedor, guardarProveedor, leerProveedores } from './proveedores.js';
-import { clavePublica, desuscribir, enviar, pushActivo, suscribir, suscripciones } from './push.js';
+import { clavePublica, desuscribir, enviar, mensajeWhatsapp, pushActivo, suscribir, suscripciones } from './push.js';
+import { enviarWhatsapp, guardarWhatsapp, leerWhatsapp } from './whatsapp.js';
 
 const DIAS_SESION = 30;
 const MAX_INTENTOS = 10;
@@ -232,6 +233,24 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
     if (ruta === '/api/push/probar' && metodo === 'POST') {
       const r = await enviar({ title: 'Mejor Precio', body: 'Así se ven los avisos de precio en este teléfono.', url: '/', tag: 'mp-prueba' });
       return json(200, r);
+    }
+
+    // WhatsApp del dueño: los mismos avisos que el push.
+    if (ruta === '/api/whatsapp' && metodo === 'GET') return json(200, await leerWhatsapp());
+    if (ruta === '/api/whatsapp' && metodo === 'PUT') {
+      return validar(async () => json(200, await guardarWhatsapp(await leerJson(request))));
+    }
+    if (ruta === '/api/whatsapp/probar' && metodo === 'POST') {
+      const wa = await leerWhatsapp();
+      if (!wa.servidor) return json(503, { error: 'Faltan WHATSAPP_TOKEN y WHATSAPP_PHONE_ID en el servidor' });
+      if (!wa.numero) return json(400, { error: 'Escribe primero el número del dueño' });
+      try {
+        const texto = mensajeWhatsapp([{ tipo: 'prueba', title: 'Así llegan los avisos', body: 'Precios, compras por aprobar, existencias bajas, productos bajo el costo y tiendas caídas.', url: '/' }]);
+        return json(200, await enviarWhatsapp(texto, { numero: wa.numero }));
+      } catch (error) {
+        console.error('[whatsapp]', error.message);
+        return json(502, { error: `WhatsApp: ${error.message}` });
+      }
     }
 
     // Inventario y ventas.

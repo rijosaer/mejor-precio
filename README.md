@@ -78,6 +78,8 @@ Notificaciones push (opcional): crea las claves y ponlas en las variables `VAPID
 npm run claves-push
 ```
 
+Avisos por WhatsApp al dueño (opcional): desde el número de la empresa con la API oficial de Meta. Pon `WHATSAPP_TOKEN` y `WHATSAPP_PHONE_ID` y el número del dueño en Ajustes → Notificaciones. Los pasos para conectarlo están en [docs/como-funciona.md §16](docs/como-funciona.md#16-avisos-por-whatsapp-al-dueño).
+
 Probar las tiendas desde la terminal (sin abrir la app):
 
 ```bash
@@ -97,6 +99,8 @@ netlify env:set APP_PASSWORD "la-clave"
 netlify env:set SESSION_SECRET "texto-largo-aleatorio"
 netlify env:set TRIVO_USUARIO "usuario-de-trivo"   # opcional: costos, existencias y ventas de Mi tienda
 netlify env:set TRIVO_CLAVE "clave-de-trivo"
+netlify env:set WHATSAPP_TOKEN "token-de-meta"          # opcional: avisos al WhatsApp del dueño
+netlify env:set WHATSAPP_PHONE_ID "id-del-numero-de-la-empresa"
 netlify deploy --prod            # otra vez, para que la función tome las variables
 ```
 
@@ -106,7 +110,7 @@ Diferencias con el servidor propio: cada búsqueda tiene 10 segundos (cada tiend
 
 1. Sube esta carpeta a un repositorio de GitHub.
 2. En Railway: **New Project → Deploy from GitHub repo** y elige el repositorio. Railway detecta Node y usa `npm start`.
-3. En **Variables** agrega `APP_PASSWORD` y `SESSION_SECRET` (y, para Mi tienda con TRIVO, `TRIVO_USUARIO` y `TRIVO_CLAVE`).
+3. En **Variables** agrega `APP_PASSWORD` y `SESSION_SECRET` (y, para Mi tienda con TRIVO, `TRIVO_USUARIO` y `TRIVO_CLAVE`; para los avisos por WhatsApp, `WHATSAPP_TOKEN` y `WHATSAPP_PHONE_ID`, ver docs/como-funciona.md §16).
 4. En **Settings → Networking** genera un dominio público.
 5. Abre ese enlace en el teléfono, entra con la contraseña y en el menú del navegador elige **Agregar a pantalla de inicio** (Android) o **Compartir → Agregar a inicio** (iPhone).
 

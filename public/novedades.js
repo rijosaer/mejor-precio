@@ -9,6 +9,24 @@ import { $, boton, el, guardado } from './util.js';
 
 export const VERSIONES = [
   {
+    version: '2.5',
+    fecha: '2026-11-01',
+    titulo: 'Avisos por WhatsApp al dueño',
+    cambios: [
+      {
+        titulo: 'WhatsApp del dueño',
+        antes: 'Los avisos solo llegaban como notificación push, y solo al teléfono donde se activaron.',
+        ahora: 'Llegan también al WhatsApp personal del dueño desde el número de la empresa, en un solo mensaje por revisión, con el enlace a la app y respetando el horario de silencio. Se configura en Ajustes → Notificaciones.',
+        donde: 'ajustes',
+      },
+      {
+        titulo: 'Todo lo que pide atención',
+        antes: 'Solo había avisos de precios de la competencia y de tiendas caídas.',
+        ahora: 'También avisa cuando un producto baja del mínimo en TRIVO, cuando un precio queda por debajo del costo, cuando hay una compra con precios por aprobar (y un recordatorio diario si siguen esperando) y cuando TRIVO deja de responder o vuelve.',
+      },
+    ],
+  },
+  {
     version: '2.4',
     fecha: '2026-11-01',
     titulo: 'Compras en TRIVO: tu precio con tu margen, con tu aprobación',

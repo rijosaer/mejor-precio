@@ -11,6 +11,9 @@ process.env.DATOS_DIR ||= mkdtempSync(join(tmpdir(), 'mp-prueba-'));
 // TRIVO con sesión simulado (tests/fixtures/trivo.json): nunca se usa el real.
 process.env.TRIVO_USUARIO = 'prueba';
 process.env.TRIVO_CLAVE = 'prueba';
+// WhatsApp simulado: los mensajes se muestran en la consola, nunca se envían.
+process.env.WHATSAPP_TOKEN = 'prueba';
+process.env.WHATSAPP_PHONE_ID = 'prueba';
 
 const fixture = (nombre) => readFileSync(new URL(`../tests/fixtures/${nombre}`, import.meta.url), 'utf8');
 const RUTAS = [
@@ -37,6 +40,11 @@ const preciosPrueba = { 1: 3500, 2: 72000, 3: 85000, 4: 48000, '4-9': 49000 };
 const real = globalThis.fetch;
 globalThis.fetch = async (url, opciones) => {
   const u = new URL(String(url));
+  if (u.hostname === 'graph.facebook.com') {
+    const cuerpo = JSON.parse(opciones.body);
+    console.log(`[whatsapp simulado → +${cuerpo.to}]\n${cuerpo.text?.body ?? JSON.stringify(cuerpo.template)}`);
+    return new Response('{"messages":[{"id":"prueba"}]}', { status: 200 });
+  }
   if (u.hostname === 'trivo-pos.com' && RUTAS_TRIVO[u.pathname]) {
     const [cuerpo, cookie] = RUTAS_TRIVO[u.pathname];
     const headers = new Headers({ 'content-type': 'application/json' });

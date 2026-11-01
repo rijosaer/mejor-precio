@@ -335,3 +335,24 @@ Emparejamiento con la carta (los id de la carta son los de TRIVO, `producto` o `
 4. **Aplicar.** `cambiarPrecio` lee el producto, comprueba que el precio en TRIVO siga siendo el de la propuesta (si alguien lo cambió, no lo pisa), manda `PATCH /api/catalog/products/<id>/` con `{base_price}` o `PATCH …/variants/<vid>/` con `{price}` y vuelve a leer para confirmar. Es la única escritura en TRIVO. Queda en `mitienda-historial-precios` con el antes y el después, y «Deshacer» vuelve al anterior con la misma comprobación.
 
 Rutas: `PUT /api/mi-tienda/margen`, `POST /api/mi-tienda/propuestas` (calcular todos), `DELETE /api/mi-tienda/propuestas?id=`, `POST /api/mi-tienda/aplicar`, `POST /api/mi-tienda/deshacer`.
+## 16. Avisos por WhatsApp al dueño
+
+**Archivos:** `src/whatsapp.js`, `notificarAvisos` y `mensajeWhatsapp` en `src/push.js`, `avisosDeAtencion` y `recordarPropuestas` en `src/mitienda.js` · **Tests:** `tests/whatsapp.test.js`
+
+Todos los avisos que salen como notificación push salen también por WhatsApp, del número de la empresa al WhatsApp personal del dueño, con la **API oficial de Meta (WhatsApp Cloud API)**. Mejor Precio lo hace por su cuenta; no usa el WhatsApp de TRIVO.
+
+- **Un solo mensaje por revisión** con todos los avisos pendientes (hasta 25 líneas) y el enlace a la app (`URL` de Netlify o `APP_URL`).
+- **Horario de silencio:** igual que el push; lo que llega de noche sale junto en la primera revisión de la mañana.
+- **Qué avisa:** bajas de precio, precio objetivo, ofertas, se agota / se agotó / volvió (Mi lista); tiendas que no responden y resumen semanal; compra en TRIVO con precios por aprobar y recordatorio diario si siguen esperando (más de 20 h); producto bajo el mínimo de existencias en TRIVO; precio por debajo del costo; TRIVO que deja de responder o vuelve. Los de TRIVO se avisan una vez, cuando aparecen.
+- **Texto o plantilla:** primero se manda un texto normal (gratis si el dueño escribió al número de la empresa en las últimas 24 horas). Si WhatsApp responde que pasó esa ventana (error 131047), se manda la plantilla aprobada con todo el texto en su variable `{{1}}` (sin saltos de línea; la plantilla sí tiene costo por mensaje según las tarifas de Meta).
+
+### Cómo conectarlo
+
+1. En [Meta for Developers](https://developers.facebook.com/) crea una app de tipo **Business** y agrégale **WhatsApp**. Agrega el número de la empresa (si ya usa la app WhatsApp Business, Meta permite conectarlo sin perder la app; si no, el número debe quedar solo para la API).
+2. En **Meta Business Suite → Usuarios del sistema** crea un usuario del sistema con permiso `whatsapp_business_messaging` y genera un **token permanente**.
+3. En **WhatsApp Manager → Plantillas** crea una plantilla de categoría **Utilidad**, idioma **Español**, nombre `aviso_mejor_precio`, con el cuerpo `{{1}}` (puede llevar texto fijo antes, por ejemplo «Mejor Precio: {{1}}»). Espera a que Meta la apruebe.
+4. En el servidor pon `WHATSAPP_TOKEN` (el token) y `WHATSAPP_PHONE_ID` (el *Phone number ID* del número de la empresa, en WhatsApp → Configuración de la API). Opcionales: `WHATSAPP_PLANTILLA`, `WHATSAPP_IDIOMA` (por defecto `es`), `WHATSAPP_DESTINO`.
+5. En la app, **Ajustes → Notificaciones → WhatsApp del dueño**: escribe el número (300 123 4567 se guarda como 573001234567) y toca «Enviar una prueba».
+6. El dueño puede escribirle «hola» al número de la empresa: durante 24 horas los avisos salen como texto normal.
+
+Rutas: `GET/PUT /api/whatsapp` (número y encendido), `POST /api/whatsapp/probar`.
