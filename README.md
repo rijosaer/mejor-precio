@@ -1,6 +1,6 @@
 # Mejor Precio
 
-App web instalable en el teléfono que busca un producto en **Bevgo, Dislicores, Éxito, Makro, Olímpica y Agua Pure** y muestra cuál lo tiene más barato, agrupado por presentación (750 ml, 6 × 330 ml…). Es para uso privado de una o dos personas y se protege con una contraseña.
+App web instalable en el teléfono que busca un producto en **Bevgo, Dislicores, Éxito, Makro, Olímpica, Agua Pure y tus proveedores propios** (más Carulla y Jumbo si las activas) y muestra cuál lo tiene más barato, agrupado por presentación (750 ml, 6 × 330 ml…). Es para uso privado de una o dos personas y se protege con una contraseña.
 
 ## Qué precio muestra cada tienda
 
@@ -13,7 +13,10 @@ App web instalable en el teléfono que busca un producto en **Bevgo, Dislicores,
 | Olímpica | Búsqueda pública (VTEX) | Precio nacional en línea |
 | Agua Pure | Carta digital pública de TRIVO POS (trivo-pos.com/m/agua-pure), completa en un solo JSON | Domicilio en Valledupar; con promoción, el precio rebajado. Las «Caja de … + Hielo» se cuentan como 24 latas |
 
-No incluye costos de envío. Los resultados se guardan 10 minutos para no repetir consultas.
+| Carulla y Jumbo | Búsqueda pública (VTEX) | Precio nacional en línea. Vienen **apagadas**: actívalas en Ajustes → Tiendas |
+| Proveedores propios | Los precios que tú anotas, importas de un CSV o pegas de WhatsApp | Lo que te cobra tu proveedor |
+
+El envío se suma si lo configuras en Ajustes → Envío por tienda. Lo que responde cada tienda se guarda 10 minutos (por tienda: si una falla, solo esa se vuelve a consultar).
 
 ## Qué más hace
 
@@ -27,6 +30,16 @@ Los ajustes, el historial y los avisos se guardan en el navegador (`localStorage
 - **Margen neto**: en la fila, **Margen** calcula `precio de venta − (compra + envío + comisión de pago + impuestos)` y avisa si da pérdida. Los valores por defecto se configuran en **Ajustes** y cada producto recuerda lo que escribiste.
 - **Logística**: en **Ajustes** marcas tu ubicación y la de cada tienda (enlace de Google Maps o `lat, lng`). Puedes ordenar los resultados por «precio + traslado», contando ida y vuelta con un costo por kilómetro. Las tiendas sin coordenadas cuentan con costo cero.
 - **Puntos y cashback**: porcentaje por tienda que se suma al margen de la calculadora.
+- **Búsqueda precisa**: palabra por palabra («ron» no trae «toronja»), la marca es obligatoria («johnnie walker black» no trae el Red Label), tolera abreviaturas y errores de una letra, oculta las variantes que no escribiste (zero, sin azúcar, tapa azul, sabores) y propone «¿Quisiste decir…?».
+- **Fotos y ficha**: cada fila trae la foto del producto; al tocarla se abre la ficha con la imagen grande, la presentación en cada tienda, el historial y el «mejor momento para comprar».
+- **Precio por litro**: en cada fila y grupo, orden por precio por litro y aviso de qué presentación sale más barata.
+- **Filtros y compartir**: solo ofertas, rango de precio y tiendas visibles; compartir el resultado, la propuesta o el plan de compra por WhatsApp.
+- **Proveedores propios**: distribuidores sin página web, creados a mano o importados (CSV de Excel, celdas copiadas o la lista que mandan por WhatsApp). Entran a la comparación como una tienda más.
+- **Mi pedido**: varios productos con su cantidad; la app arma el plan de compra más barato entre tiendas, contando envío, envío gratis y pedido mínimo.
+- **Inventario y ventas**: «Compré», «Vendí» y «Contar» en Catálogo; ganancia por mes, productos que más rotan y aviso de pocas unidades.
+- **Notificaciones push** con horario de silencio, resumen semanal los lunes y aviso si una tienda deja de responder (**Estado de las tiendas**).
+- **Ajustes compartidos** entre las dos personas, tiendas activas, presentaciones favoritas, orden inicial, umbrales de oferta, frecuencia del monitoreo, tema claro/oscuro, tamaño de letra y respaldo en archivo.
+- **Escáner** en Android (detector del navegador) y en iPhone (ZXing incluido en `public/vendor/`).
 
 ## Cómo buscar
 
@@ -48,6 +61,18 @@ En PowerShell:
 
 ```powershell
 $env:APP_PASSWORD="una-clave"; $env:SESSION_SECRET="texto-largo-aleatorio"; npm start
+```
+
+Probar la app sin internet, con respuestas de ejemplo de cada tienda (contraseña `prueba`):
+
+```bash
+npm run prueba-local
+```
+
+Notificaciones push (opcional): crea las claves y ponlas en las variables `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT`:
+
+```bash
+npm run claves-push
 ```
 
 Probar las tiendas desde la terminal (sin abrir la app):
@@ -91,16 +116,20 @@ Cada tienda está en su propio archivo en `src/tiendas/`. Si una cambia su pági
 ## Estructura
 
 ```
-server.js              servidor: contraseña, búsqueda y archivos de la app
-src/comparador.js      consulta las 5 tiendas en paralelo, filtra y guarda en caché
-src/normalizar.js      lee tamaños (ml), unidades del empaque y compara nombres
-src/tiendas/*.js       un lector por tienda (precio, stock y código de barras)
-src/monitor.js         Mi lista en el servidor, revisión programada, avisos y resumen del mercado
+server.js              servidor: contraseña, API, archivos de la app y monitoreo cada hora
+src/api.js             rutas /api/* (las comparte la función de Netlify)
+src/comparador.js      consulta las tiendas en paralelo, caché por tienda y estadísticas
+src/normalizar.js      tamaños, unidades, grados, coincidencia de palabras, variantes y firma
+src/tiendas/*.js       un lector por tienda (vtex.js sirve para Carulla y Jumbo)
+src/proveedores.js     proveedores propios sin página web
+src/monitor.js         Mi lista, revisión programada, avisos, salud de tiendas y resumen semanal
+src/config.js          frecuencia, tiendas y silencio del monitoreo; ajustes compartidos
+src/push.js            notificaciones push
+src/inventario.js      compras, ventas y conteos
 src/almacen.js         Netlify Blobs en Netlify; archivos JSON en datos/ con server.js
 netlify/functions/     api.mjs (la API) y monitor.mjs (función programada cada hora)
-public/                la app (HTML, CSS, JS, manifiesto e íconos)
-public/reglas.js       reglas compartidas navegador/servidor: historial, punto dulce, stock, cambios
-public/datos.js        histórico de precios, alertas, ajustes, margen, logística y precio sugerido
-tests/                 pruebas de lectura de nombres y de la lógica del navegador
-scripts/probar.js      prueba de las 5 tiendas desde la terminal
+public/                la app: un módulo por vista (resultados, lista, catálogo, pedido, ventas,
+                       proveedores, ajustes, estado) + datos.js, reglas.js y funciones puras
+tests/                 lectura de cada tienda (fixtures), precisión, API, monitoreo, pedido, CSV
+scripts/               probar.js (tiendas reales), servidor-prueba.js (sin internet), claves-push.js
 ```

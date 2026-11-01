@@ -294,7 +294,7 @@ export function extraerGrados(texto = '') {
 // Firma para reconocer el mismo producto en tiendas que no publican el código
 // de barras: palabras propias del nombre (sin categoría, presentación ni
 // números) + tamaño + unidades + grados.
-const RELLENO = new Set(['botella', 'unidad', 'und', 'x', 'pet', 'vidrio', 'ml', 'cc', 'lt', 'l', 'litro', 'tradicional', 'original', 'garrafa', 'media']);
+const RELLENO = new Set(['tapa', 'roja', 'botella', 'unidad', 'und', 'x', 'pet', 'vidrio', 'ml', 'cc', 'lt', 'l', 'litro', 'tradicional', 'original', 'garrafa', 'media']);
 export function firmaProducto(p) {
   if (!p.ml) return null;
   const propias = [...new Set(tokens(p.nombre))]

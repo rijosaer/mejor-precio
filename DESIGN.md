@@ -66,3 +66,14 @@ Un solo momento autorado: los grupos de resultados entran desde abajo con un des
 - Selección de texto y cursor con el color de la marca.
 - Barra de desplazamiento propia, delgada y neutra.
 - Contraste del texto secundario verificado sobre el papel y sobre las superficies teñidas.
+
+## Tema oscuro
+
+«El anaquel con la luz apagada»: los mismos tokens con papel `#111418`, superficies `#1a1e24` y tinta `#eef0f3`. El amarillo de decisión no cambia, y el texto sobre él usa siempre `--sobre-etiqueta` (tinta oscura) para mantener el contraste. Sigue al teléfono por defecto (`prefers-color-scheme`) y se puede fijar en Ajustes (`data-theme` en `<html>`). El tamaño de letra de Ajustes escala toda la interfaz con `zoom: var(--escala)`.
+
+## Componentes nuevos
+
+- **Foto**: cuadro de 52 px (44 px en el teléfono) con borde de 1 px y la imagen en `object-fit: contain`; si la tienda no la deja cargar queda el cuadro neutro. Tocarla abre la **ficha** (`<dialog>`), con la foto grande, el precio a 26 px y la presentación en cada tienda.
+- **Precio por litro**: franja verde (`--ahorro-fondo`) solo cuando una presentación sale al menos 2 % más barata por litro.
+- **Chip de variante** en ámbar y **chip de proveedor propio** neutro.
+- **Aviso flotante**: píldora de tinta abajo al centro, 2,6 s, para confirmar «Agregado al pedido».

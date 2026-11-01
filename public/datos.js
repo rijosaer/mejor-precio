@@ -10,6 +10,18 @@ export const AJUSTES_POR_DEFECTO = {
   margen: { comisionPct: 0, comisionFija: 0, ivaPct: 0, envio: 0, objetivo: 20 },
   logistica: { activo: false, porKm: 1000, tuLat: null, tuLng: null, tiendas: {} },
   cashback: {},
+  // Tiendas que se consultan: { id: true | false }. Las que no están aquí usan
+  // lo que diga el servidor (las de siempre prendidas; Carulla y Jumbo apagadas).
+  tiendas: {},
+  // Cómo llega el producto de cada tienda: { id: { modo: 'domicilio' | 'recojo',
+  // costo, gratisDesde, minimo } }.
+  envios: {},
+  // Presentaciones que van primero: "750, 1000, 6x330".
+  favoritas: '',
+  orden: 'precio',
+  ofertas: { oferta: 5, liquidacion: 25 },
+  apariencia: { tema: 'auto', letra: 100 },
+  t: 0,
 };
 
 function leer(clave, porDefecto) {
@@ -208,9 +220,12 @@ export function descartarTodas() {
 
 export const ajustes = () => ajustesActuales;
 
-export function guardarAjustes(nuevos) {
-  ajustesActuales = fusionar(AJUSTES_POR_DEFECTO, nuevos);
+// Guarda los ajustes con la hora del cambio (para sincronizarlos con el
+// servidor: gana el más reciente). `t` permite adoptar los del servidor tal cual.
+export function guardarAjustes(nuevos, t = Date.now()) {
+  ajustesActuales = fusionar(AJUSTES_POR_DEFECTO, { ...nuevos, t });
   guardar('mp-ajustes', ajustesActuales);
+  return ajustesActuales;
 }
 
 export const venta = (clave) => ventas[clave] || null;
@@ -297,4 +312,121 @@ export function precioSugerido({ costo, envio = 0, comisionPct = 0, comisionFija
   const resto = 1 - variables - (Number(margenPct) || 0) / 100;
   if (resto <= 0) return { precio: null, piso, motivo: 'imposible' };
   return { precio: redondear(fijos / resto), piso, motivo: null };
+}
+
+// ── Envío o traslado por tienda ────────────────────────────────────────────
+// Lo que cuesta que el producto llegue: domicilio (costo fijo, gratis desde un
+// monto) o recogerlo (traslado por kilómetro). null si el pedido no alcanza el
+// mínimo de la tienda.
+export function costoLlegada(tiendaId, subtotal = 0) {
+  const e = ajustesActuales.envios[tiendaId];
+  if (e?.minimo > 0 && subtotal < e.minimo) return null;
+  if (e?.modo === 'domicilio') return e.gratisDesde > 0 && subtotal >= e.gratisDesde ? 0 : Number(e.costo) || 0;
+  return traslado(tiendaId);
+}
+
+export function llegadaInfo(tiendaId, subtotal = 0) {
+  const e = ajustesActuales.envios[tiendaId];
+  if (e?.modo === 'domicilio') {
+    const costo = costoLlegada(tiendaId, subtotal);
+    return { modo: 'domicilio', costo, minimo: e.minimo || 0, gratisDesde: e.gratisDesde || 0 };
+  }
+  const t = trasladoInfo(tiendaId);
+  return t ? { modo: 'recojo', costo: t.costo, km: t.km } : null;
+}
+
+export const hayCostosDeLlegada = () =>
+  ajustesActuales.logistica.activo || Object.values(ajustesActuales.envios).some((e) => e?.modo === 'domicilio');
+
+// "750, 1000, 6x330, 24 x 330" → ["1x750", "1x1000", "6x330", "24x330"]
+export function presentacionesFavoritas(texto = ajustesActuales.favoritas) {
+  return String(texto || '')
+    .split(/[,;]+/)
+    .map((x) => x.toLowerCase().replace(/\s+/g, '').replace(/ml$/, ''))
+    .map((x) => {
+      const m = x.match(/^(?:(\d{1,2})[x×*])?(\d{2,5})$/);
+      return m ? `${m[1] || 1}x${m[2]}` : null;
+    })
+    .filter(Boolean);
+}
+
+// ── Mejor momento de compra ────────────────────────────────────────────────
+// Con suficiente historial (≥ 45 días y ≥ 12 lecturas) busca si el producto
+// suele estar más barato en alguna parte del mes o algún día de la semana.
+// Compara el promedio de cada tramo con el promedio general.
+const TRAMOS_MES = [
+  [1, 7, 'la primera semana del mes'],
+  [8, 15, 'del 8 al 15 de cada mes'],
+  [16, 23, 'del 16 al 23 de cada mes'],
+  [24, 31, 'a fin de mes'],
+];
+const DIAS_SEMANA = ['los domingos', 'los lunes', 'los martes', 'los miércoles', 'los jueves', 'los viernes', 'los sábados'];
+
+export function patronCompra(puntos, { minimoDias = 45, minimoPuntos = 12, minimoBaja = 3 } = {}) {
+  const validos = puntos.filter((x) => x.p > 0);
+  if (validos.length < minimoPuntos || validos[validos.length - 1].t - validos[0].t < minimoDias * DIA) return null;
+  const promedio = validos.reduce((s, x) => s + x.p, 0) / validos.length;
+  const candidatos = [];
+  const evaluar = (grupos, texto) => {
+    for (const [clave, lista] of grupos) {
+      if (lista.length < 3) continue;
+      const media = lista.reduce((s, x) => s + x.p, 0) / lista.length;
+      const baja = ((promedio - media) / promedio) * 100;
+      if (baja >= minimoBaja) candidatos.push({ texto: texto(clave), baja, lecturas: lista.length });
+    }
+  };
+  const porTramo = new Map();
+  const porDia = new Map();
+  for (const x of validos) {
+    const d = new Date(x.t);
+    const tramo = TRAMOS_MES.findIndex(([a, b]) => d.getDate() >= a && d.getDate() <= b);
+    porTramo.set(tramo, [...(porTramo.get(tramo) || []), x]);
+    porDia.set(d.getDay(), [...(porDia.get(d.getDay()) || []), x]);
+  }
+  evaluar(porTramo, (i) => TRAMOS_MES[i][2]);
+  evaluar(porDia, (i) => DIAS_SEMANA[i]);
+  candidatos.sort((a, b) => b.baja - a.baja);
+  return candidatos[0] || null;
+}
+
+// Cambios de la semana en los productos de la lista (para el resumen que se ve
+// en Mi lista): el más barato de los últimos 2 días contra el de hace ~1 semana.
+export function cambioSemanal(claves, ahora = Date.now()) {
+  let hoy = null;
+  let antes = null;
+  for (const clave of claves) {
+    for (const x of serie(clave)) {
+      if (!(x.p > 0) || x.d === false) continue;
+      if (ahora - x.t <= 2 * DIA) hoy = hoy === null ? x.p : Math.min(hoy, x.p);
+      if (ahora - x.t >= 5 * DIA && ahora - x.t <= 9 * DIA) antes = antes === null ? x.p : Math.min(antes, x.p);
+    }
+  }
+  if (hoy === null || antes === null) return null;
+  return { hoy, antes, pct: ((hoy - antes) / antes) * 100 };
+}
+
+// ── Respaldo ───────────────────────────────────────────────────────────────
+// Todo lo que la app guarda en este navegador, para bajarlo como archivo.
+export function exportarRespaldo() {
+  const datos = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k.startsWith('mp-')) datos[k] = JSON.parse(localStorage.getItem(k));
+    }
+  } catch {
+    /* sin acceso al almacenamiento */
+  }
+  return { app: 'mejor-precio', version: 1, creado: new Date().toISOString(), datos };
+}
+
+export function importarRespaldo(respaldo) {
+  if (respaldo?.app !== 'mejor-precio' || typeof respaldo.datos !== 'object') throw new Error('Ese archivo no es un respaldo de Mejor Precio');
+  let n = 0;
+  for (const [k, v] of Object.entries(respaldo.datos)) {
+    if (!/^mp-[\w-]{1,40}$/.test(k)) continue;
+    guardar(k, v);
+    n++;
+  }
+  return n;
 }

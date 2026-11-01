@@ -5,7 +5,7 @@ const CLAVE_VISTO = 'mp-tutorial-v1';
 
 const PASOS = [
   {
-    titulo: 'Buscas una vez, comparas seis tiendas',
+    titulo: 'Buscas una vez, comparas todas las tiendas',
     cuerpo:
       'Escribe la marca y el tamaño. Bevgo, Dislicores, Éxito, Makro, Olímpica y Agua Pure se consultan al mismo tiempo ' +
       'y la app te muestra cuál lo tiene más barato.',
@@ -92,6 +92,29 @@ const PASOS = [
         <span class="demo-chip aviso">12,4 km · +$9.920 de traslado</span>
         <span class="demo-chip aviso">3,1 km · +$2.480 de traslado</span>
         <div class="demo-orden">Ordenar por <b>precio + traslado</b></div>
+      </div>`,
+  },
+  {
+    titulo: 'Tus proveedores también cuentan',
+    cuerpo:
+      'En «Proveedores» anotas los precios del distribuidor que no tiene página web (a mano, desde un Excel o ' +
+      'pegando su lista de WhatsApp) y aparece en cada búsqueda junto a las tiendas.',
+    demo: `
+      <div class="demo demo-filas">
+        <div class="demo-fila ganadora"><span class="demo-tienda">Don José</span><span class="demo-etiqueta">Mejor precio</span><span class="demo-precio">$41.500</span></div>
+        <div class="demo-fila"><span class="demo-tienda">Makro</span><span class="demo-precio">$43.900</span></div>
+      </div>`,
+  },
+  {
+    titulo: 'Arma el pedido y que la app decida dónde',
+    cuerpo:
+      'Con «Agregar al pedido» juntas varios productos. La app reparte la compra entre tiendas para pagar menos ' +
+      'en total, contando el envío y el pedido mínimo de cada una.',
+    demo: `
+      <div class="demo demo-margen">
+        <div class="demo-linea-salida"><span>Makro · 3 productos</span><b>$128.400</b></div>
+        <div class="demo-linea-salida"><span>Don José · 2 productos</span><b>$83.000</b></div>
+        <div class="demo-linea-salida resultado"><span>Ahorras frente a una sola tienda</span><b class="positivo">$14.600</b></div>
       </div>`,
   },
 ];
