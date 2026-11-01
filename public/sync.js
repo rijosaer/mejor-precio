@@ -77,6 +77,7 @@ const TIENDAS_CONOCIDAS = [
   { id: 'makro', nombre: 'Makro', porDefecto: true },
   { id: 'olimpica', nombre: 'Olímpica', porDefecto: true },
   { id: 'aguapure', nombre: 'Agua Pure', porDefecto: true },
+  { id: 'd1', nombre: 'D1', porDefecto: true },
 ];
 
 export async function catalogoTiendas() {

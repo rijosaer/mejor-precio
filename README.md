@@ -1,6 +1,6 @@
 # Mejor Precio
 
-App web instalable en el teléfono que busca un producto en **Bevgo, Dislicores, Éxito, Makro, Olímpica, Agua Pure y tus proveedores propios** (más Carulla y Jumbo si las activas) y muestra cuál lo tiene más barato, agrupado por presentación (750 ml, 6 × 330 ml…). Es para uso privado de una o dos personas y se protege con una contraseña.
+App web instalable en el teléfono que busca un producto en **Bevgo, Dislicores, Éxito, Makro, Olímpica, Agua Pure, D1 y tus proveedores propios** (más Carulla y Jumbo si las activas) y muestra cuál lo tiene más barato, agrupado por presentación (750 ml, 6 × 330 ml…). Es para uso privado de una o dos personas y se protege con una contraseña.
 
 ## Qué precio muestra cada tienda
 
@@ -13,7 +13,8 @@ App web instalable en el teléfono que busca un producto en **Bevgo, Dislicores,
 | Olímpica | Búsqueda pública (VTEX) | Precio nacional en línea |
 | Agua Pure | Carta digital pública de TRIVO POS (trivo-pos.com/m/agua-pure), completa en un solo JSON | Domicilio en Valledupar; con promoción, el precio rebajado. Las «Caja de … + Hielo» se cuentan como 24 latas |
 
-| Carulla y Jumbo | Búsqueda pública (VTEX) | Precio nacional en línea. Vienen **apagadas**: actívalas en Ajustes → Tiendas |
+| D1 | Búsqueda pública (VTEX) de su tienda a domicilio | Precio nacional (el mismo en sus tiendas de Valledupar), con código de barras |
+| Carulla y Jumbo | Búsqueda pública (VTEX); Jumbo en jumbocolombia.com | Precio nacional en línea. Vienen **apagadas**: actívalas en Ajustes → Tiendas |
 | Proveedores propios | Los precios que tú anotas, importas de un CSV o pegas de WhatsApp | Lo que te cobra tu proveedor |
 
 El envío se suma si lo configuras en Ajustes → Envío por tienda. Lo que responde cada tienda se guarda 10 minutos (por tienda: si una falla, solo esa se vuelve a consultar).
@@ -30,6 +31,7 @@ Los ajustes, el historial y los avisos se guardan en el navegador (`localStorage
 - **Margen neto**: en la fila, **Margen** calcula `precio de venta − (compra + envío + comisión de pago + impuestos)` y avisa si da pérdida. Los valores por defecto se configuran en **Ajustes** y cada producto recuerda lo que escribiste.
 - **Logística**: en **Ajustes** marcas tu ubicación y la de cada tienda (enlace de Google Maps o `lat, lng`). Puedes ordenar los resultados por «precio + traslado», contando ida y vuelta con un costo por kilómetro. Las tiendas sin coordenadas cuentan con costo cero.
 - **Puntos y cashback**: porcentaje por tienda que se suma al margen de la calculadora.
+- **Listas predeterminadas**: en Mi lista, 14 cervezas y 10 licores armados con búsquedas reales (cada uno en el tamaño que más tiendas comparan, entre 4 y 8 tiendas). Las cervezas también están como botones debajo del buscador.
 - **Búsqueda precisa**: palabra por palabra («ron» no trae «toronja»), la marca es obligatoria («johnnie walker black» no trae el Red Label), tolera abreviaturas y errores de una letra, oculta las variantes que no escribiste (zero, sin azúcar, tapa azul, sabores) y propone «¿Quisiste decir…?».
 - **Fotos y ficha**: cada fila trae la foto del producto; al tocarla se abre la ficha con la imagen grande, la presentación en cada tienda, el historial y el «mejor momento para comprar».
 - **Precio por litro**: en cada fila y grupo, orden por precio por litro y aviso de qué presentación sale más barata.

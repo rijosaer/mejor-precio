@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#eef0f3">
-  <meta name="description" content="Compara el precio de un producto en Bevgo, Dislicores, Éxito, Makro, Olímpica, Agua Pure y tus proveedores.">
+  <meta name="description" content="Compara el precio de un producto en Bevgo, Dislicores, Éxito, Makro, Olímpica, Agua Pure, D1 y tus proveedores.">
   <title>Mejor Precio</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -18,7 +18,7 @@
       <img src="icons/icon-192.png" alt="" width="28" height="28">
       <div>
         <h1>Mejor Precio</h1>
-        <p>Bevgo · Dislicores · Éxito · Makro · Olímpica · Agua Pure · tus proveedores</p>
+        <p>Bevgo · Dislicores · Éxito · Makro · Olímpica · Agua Pure · D1 · tus proveedores</p>
       </div>
     </a>
     <div class="acciones">
@@ -65,6 +65,7 @@
       <p class="ayuda">Incluye el tamaño (750, 375, 1000…) para comparar la misma presentación, o escribe el código de barras (EAN) para encontrar el producto exacto. Cada búsqueda alimenta tu historial: con el tiempo aparecen los avisos de precio.</p>
 
       <div id="recientes" class="recientes"></div>
+      <div id="rapidas" class="recientes rapidas"></div>
 
       <div id="estado" class="estado" aria-live="polite"></div>
       <div id="resultados"></div>
@@ -80,6 +81,11 @@
         <button class="boton" type="submit">Agregar</button>
       </form>
       <div id="lista-items" class="lista-items"></div>
+      <div class="sugeridas-bloque">
+        <h3>Listas predeterminadas</h3>
+        <p class="ayuda">Armadas con búsquedas reales en todas las tiendas: cada producto en el tamaño que más tiendas comparan. Elige cuáles agregar.</p>
+        <div id="listas-sugeridas"></div>
+      </div>
       <button id="lista-analizar" class="boton" type="button">Analizar ahora</button>
       <div id="lista-estado" class="estado" aria-live="polite"></div>
       <div id="propuesta"></div>

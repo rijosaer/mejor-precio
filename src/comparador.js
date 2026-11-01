@@ -1,6 +1,7 @@
 import * as aguapure from './tiendas/aguapure.js';
 import * as bevgo from './tiendas/bevgo.js';
 import * as carulla from './tiendas/carulla.js';
+import * as d1 from './tiendas/d1.js';
 import * as dislicores from './tiendas/dislicores.js';
 import * as exito from './tiendas/exito.js';
 import * as jumbo from './tiendas/jumbo.js';
@@ -12,8 +13,10 @@ import {
   extraerGrados,
   filtrarProductos,
   firmaProducto,
+  inferirPaquete,
   marcarVariantes,
   miniatura,
+  mlPorUnidad,
   normalizar,
   palabrasClave,
   sugerirConsulta,
@@ -23,11 +26,11 @@ import { comoTienda, idTienda, leerProveedores } from './proveedores.js';
 
 // Todas las tiendas que la app sabe consultar. Las que tienen `porDefecto:
 // false` solo se consultan si se activan en Ajustes.
-export const TIENDAS = [bevgo, dislicores, exito, makro, olimpica, aguapure, carulla, jumbo];
+export const TIENDAS = [bevgo, dislicores, exito, makro, olimpica, aguapure, d1, carulla, jumbo];
 export const POR_DEFECTO = TIENDAS.filter(({ tienda }) => tienda.porDefecto !== false).map(({ tienda }) => tienda.id);
 
 // Tiendas cuyo buscador encuentra un producto por su código de barras.
-const BUSCAN_CODIGO = new Set(['dislicores', 'exito', 'olimpica', 'carulla', 'jumbo']);
+const BUSCAN_CODIGO = new Set(['dislicores', 'exito', 'olimpica', 'd1', 'carulla', 'jumbo']);
 
 const CACHE_MINUTOS = 10;
 const LIMITE_MS = 9000; // cada tienda tiene este tiempo en total (Netlify corta a los 10 s)
@@ -74,7 +77,8 @@ function conLimite(promesa, ms = LIMITE_MS) {
 // Datos que se calculan igual para todas las tiendas.
 function completar(p) {
   const grados = extraerGrados(p.nombre);
-  const salida = { ...p, grados, imagen: miniatura(p.imagen), imagenGrande: p.imagen ?? null };
+  const paquete = inferirPaquete(p.nombre, mlPorUnidad(p.ml, p.unidades), p.unidades);
+  const salida = { ...p, ...paquete, grados, imagen: miniatura(p.imagen), imagenGrande: p.imagen ?? null };
   salida.firma = firmaProducto(salida);
   return salida;
 }

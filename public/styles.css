@@ -1406,3 +1406,15 @@ textarea:focus { border-color: var(--tinta); outline: none; }
 @media (max-width: 560px) {
   .novedad-comparar { grid-template-columns: 1fr; }
 }
+
+/* ── Listas predeterminadas y búsquedas rápidas ─────────────────────────── */
+.sugeridas-bloque { margin: 22px 0 18px; }
+.sugeridas-bloque h3 { margin: 0 0 4px; font-size: 16px; letter-spacing: -0.01em; }
+.sugerida { margin-top: 10px; padding: 12px 14px; background: var(--superficie); border: 1px solid var(--linea); border-radius: 12px; }
+.sugerida summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; cursor: pointer; }
+.sugerida summary .ayuda { margin: 0; }
+.sugerida[open] summary { margin-bottom: 4px; }
+.sugerida-opciones { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px 12px; margin: 8px 0 4px; }
+.sugerida-opciones .opciones { margin: 0; font-size: 14px; }
+.rapidas { align-items: center; margin-top: 6px; }
+.rapidas-titulo { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tinta-suave); margin-right: 2px; }

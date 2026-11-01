@@ -9,6 +9,39 @@ import { $, boton, el, guardado } from './util.js';
 
 export const VERSIONES = [
   {
+    version: '2.1',
+    fecha: '2026-11-01',
+    titulo: 'Listas de cervezas y licores, D1 y búsqueda probada con precios reales',
+    cambios: [
+      {
+        titulo: 'Listas predeterminadas',
+        antes: 'Mi lista empezaba vacía y había que escribir cada producto.',
+        ahora: 'En Mi lista eliges de dos listas armadas con búsquedas reales: 14 cervezas y 10 licores, cada uno en el tamaño que más tiendas comparan.',
+        donde: 'lista',
+      },
+      {
+        titulo: 'Cervezas a un toque',
+        antes: 'Para buscar una cerveza había que escribirla.',
+        ahora: 'Debajo del buscador están las cervezas más comunes (Águila, Poker, Club Colombia, Corona…): un toque y comparas.',
+      },
+      {
+        titulo: 'D1 se suma a la comparación',
+        antes: 'Se consultaban seis tiendas.',
+        ahora: 'También D1, con sus precios y códigos de barras. Jumbo quedó con su dirección correcta (sigue apagada; actívala en Ajustes).',
+      },
+      {
+        titulo: 'Paquetes bien leídos',
+        antes: 'Algunos six pack salían como una sola lata de 1.614 ml y «Paga 11 lleva 12» como una unidad.',
+        ahora: 'Se reconocen como 6 × 269 ml, 24 × 269 ml o 12 latas, y se comparan con los demás paquetes.',
+      },
+      {
+        titulo: 'Menos productos que no son',
+        antes: 'Aparecían el refajo con la cerveza, la Double Black con la Black Label o un destapador entre las cervezas.',
+        ahora: 'Refajo, sin alcohol, Imperial, Double Black, packs con obsequio y artículos que no son bebida quedan aparte.',
+      },
+    ],
+  },
+  {
     version: '2.0',
     fecha: '2026-11-01',
     titulo: 'Proveedores, pedido, inventario y búsqueda más precisa',

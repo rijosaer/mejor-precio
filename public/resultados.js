@@ -694,7 +694,7 @@ export function pintarResultados() {
       'p',
       'nota',
       `Consultado el ${fechaLarga(datos.consultadoEn)} · Éxito y Olímpica muestran su precio nacional en línea; Makro, el de su tienda en Valledupar; ` +
-        'Bevgo y Dislicores, el de su tienda en línea; Agua Pure, el de su carta a domicilio en Valledupar.' +
+        'Bevgo y Dislicores, el de su tienda en línea; Agua Pure, el de su carta a domicilio en Valledupar; D1, su precio nacional.' +
         (propios.length ? ` ${propios.map((t) => `${t.nombre} (lista actualizada ${t.actualizado ? hace(t.actualizado) : 'sin fecha'})`).join(', ')}: precios que tú anotaste.` : '') +
         ' Verifica en la tienda antes de comprar.',
     ),

@@ -6,6 +6,7 @@ import { ajustes, fusionarServidor, registrar } from './datos.js';
 import { configurarEscaner } from './escaner.js';
 import { abrirEstado, configurarEstado } from './estado.js';
 import { abrirLista, analizarLista, configurarLista, propuestaVieja } from './lista.js';
+import { LISTAS } from './listas-sugeridas.js';
 import { configurarNovedades, iniciarNovedades } from './novedades.js';
 import { agregarAlPedido, configurarPedido, pintarPedido } from './pedido.js';
 import { abrirProveedores, configurarProveedores } from './proveedores.js';
@@ -70,12 +71,24 @@ function pintarSugerencias() {
 function pintarRecientes() {
   const caja = $('#recientes');
   caja.replaceChildren();
+  $('#rapidas').hidden = Boolean(ultimo);
   if (ultimo) return;
   for (const q of guardado('mp-recientes') || []) {
     const b = el('button', '', q);
     b.type = 'button';
     b.addEventListener('click', () => buscar(q));
     caja.append(b);
+  }
+  // Búsquedas rápidas de cervezas (la lista predeterminada).
+  const cervezas = LISTAS.find((l) => l.id === 'cervezas');
+  const rapidas = $('#rapidas');
+  rapidas.replaceChildren(el('span', 'rapidas-titulo', 'Cervezas'));
+  for (const p of cervezas.productos) {
+    const b = el('button', '', p.corto);
+    b.type = 'button';
+    b.title = p.q;
+    b.addEventListener('click', () => buscar(p.q));
+    rapidas.append(b);
   }
 }
 

@@ -20,7 +20,7 @@ const caracter = (n) => (n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '');
 // Algunas tiendas entregan nombres con caracteres dañados (ANTIOQUE�O, 24�).
 export function repararNombre(texto = '') {
   return String(texto)
-    .replace(/(?<=[A-Z])�(?=[A-Z])/g, 'Ñ')
+    .replace(/(?<=[A-Z])[�#](?=[A-Z])/g, 'Ñ')
     .replace(/(?<=[a-z])�(?=[a-z])/g, 'ñ')
     .replace(/(?<=\d)�/g, '°')
     .replace(/�/g, '')
@@ -51,9 +51,36 @@ export function extraerMl(texto = '') {
   return ml >= 50 && ml <= 20000 ? Math.round(ml) : null;
 }
 
+// Algunas tiendas ponen el contenido total del empaque ("six pack (1614 ml)"):
+// si al dividir por las unidades da un tamaño de lata o botella conocido, ese
+// es el tamaño de cada una.
+const TAMANOS_UNIDAD = [180, 200, 207, 210, 220, 237, 250, 269, 275, 300, 310, 330, 350, 355, 375, 473, 500, 750];
+export function mlPorUnidad(ml, unidades) {
+  if (!ml || !(unidades > 1) || ml < 1000) return ml;
+  const porUnidad = ml / unidades;
+  const conocido = TAMANOS_UNIDAD.find((t) => Math.abs(t - porUnidad) <= 1);
+  return conocido ?? ml;
+}
+
+// Cerveza publicada como una sola lata con el contenido del paquete entero
+// ("Cerveza STELLA ARTOIS lata (1614 ml)" = 6 × 269). Una lata o botella de
+// cerveza no pasa de 1 litro: si el total se reparte exacto en 4, 6, 12, 24 o
+// 30 unidades de un tamaño conocido, ese es el paquete.
+export function inferirPaquete(nombre, ml, unidades) {
+  if (!ml || unidades > 1 || ml < 1000 || !/cerveza|beer/i.test(String(nombre))) return { ml, unidades };
+  for (const n of [6, 24, 12, 4, 30]) {
+    const conocido = TAMANOS_UNIDAD.find((t) => t < 750 && Math.abs(t - ml / n) <= 1);
+    if (conocido) return { ml: conocido, unidades: n };
+  }
+  return { ml, unidades };
+}
+
 // Unidades por empaque: six pack, "x6", "6 latas", "caja x 24"…
 export function extraerUnidades(texto = '') {
   const t = normalizar(texto);
+  // "PAGUE 11 LLEVE 12", "PAG11 LLEV12": el paquete trae las que se llevan.
+  const promo = t.match(/pag(?:ue)?\s*\d{1,2}\s*l+lev(?:e|a)?\s*(\d{1,2})(?!\d)/);
+  if (promo) return Number(promo[1]);
   if (/six\s*-?\s*pack|sixpack/.test(t)) return 6;
   if (/twelve\s*-?\s*pack/.test(t)) return 12;
   if (/four\s*-?\s*pack/.test(t)) return 4;
@@ -114,16 +141,19 @@ export const PRESENTACIONES = new Set([
   'ml', 'cc', 'lt', 'lts', 'litro', 'litros', 'l',
   'unid', 'unids', 'unidad', 'unidades', 'u', 'uds', 'und', 'unds',
   'pack', 'sixpack', 'six', 'twelve', 'four', 'caja', 'display', 'canasta', 'paquete', 'botella', 'botellas',
-  'lata', 'latas', 'garrafa', 'botellin', 'botellines', 'pet', 'vidrio', 'tetrapak', 'media', 'medias',
+  'lata', 'latas', 'garrafa', 'botellin', 'botellines', 'pet', 'vidrio', 'tetrapak', 'tetra', 'media', 'medias',
 ]);
 
 // Variantes que cambian el producto. Si no se escribieron y hay otras opciones
 // sin ellas, el producto se marca como «otra variante» y se oculta por defecto.
 const VARIANTES = [
   ['sin azucar', 'Sin azúcar'], ['cero azucar', 'Sin azúcar'], ['zero', 'Zero'], ['cero', 'Zero'],
-  ['light', 'Light'], ['lite', 'Light'], ['ligth', 'Light'],
+  ['light', 'Light'], ['lite', 'Light'], ['ligth', 'Light'], ['ligh', 'Light'], ['refajo', 'Refajo'], ['guayera', 'Con obsequio'],
   // La tapa roja es el Antioqueño de siempre: no cuenta como variante.
-  ['tapa azul', 'Tapa azul'], ['tapa verde', 'Tapa verde'],
+  ['tapa azul', 'Tapa azul'], ['tapa verde', 'Tapa verde'], ['azul', 'Azul'], ['verde', 'Verde'],
+  ['real', 'Real'], ['amarillo', 'Amarillo'], ['herencia', 'Herencia'], ['double', 'Double'],
+  ['imperial', 'Imperial'], ['pink', 'Pink'], ['rosado', 'Rosado'], ['vasos', 'Con vaso'], ['gratis', 'Con obsequio'],
+  ['obsequio', 'Con obsequio'], ['regalo', 'Con obsequio'],
   ['gran reserva', 'Gran reserva'], ['reserva', 'Reserva'], ['anejo', 'Añejo'], ['extra anejo', 'Extra añejo'],
   ['sabor', 'Con sabor'], ['saborizado', 'Con sabor'], ['saborizada', 'Con sabor'], ['michelada', 'Michelada'],
   ['radler', 'Radler'], ['limon', 'Limón'], ['mango', 'Mango'], ['maracuya', 'Maracuyá'], ['cereza', 'Cereza'],
@@ -223,18 +253,27 @@ export function palabrasPresentacion(consulta) {
 }
 
 // Variantes que trae el nombre y que la búsqueda no pidió.
+// Abreviaturas de las tiendas: "S/A" (sin azúcar), "S/ALCOHOL", "0,0".
+const expandir = (nombre) =>
+  String(nombre)
+    .replace(/\bs\s*\/\s*a\b/gi, ' sin azucar ')
+    .replace(/\bs\s*\/\s*alcohol\b/gi, ' sin alcohol ')
+    .replace(/(?<![\d.,])0[.,]0(?![\d])/g, ' sin alcohol ');
+
 export function variantesNoPedidas(producto, palabras) {
-  const texto = ` ${tokens(producto.nombre).join(' ')} `;
+  const texto = ` ${tokens(expandir(producto.nombre)).join(' ')} `;
   const pedido = ` ${palabras.join(' ')} `;
   const vistas = new Set();
+  // Una variante se pidió si la búsqueda trae cualquiera de sus formas ("light" cubre "ligh" y "lite").
+  const pedidas = new Set(VARIANTES.filter(([frase]) => frase.split(' ').every((f) => pedido.includes(` ${f} `))).map(([, etiqueta]) => etiqueta));
   for (const [frase, etiqueta] of VARIANTES) {
-    if (texto.includes(` ${frase} `) && !pedido.includes(` ${frase} `) && !frase.split(' ').every((f) => pedido.includes(` ${f} `))) {
-      vistas.add(etiqueta);
-    }
+    if (texto.includes(` ${frase} `) && !pedidas.has(etiqueta)) vistas.add(etiqueta);
   }
   // "Extra añejo" ya incluye "añejo".
   if (vistas.has('Extra añejo')) vistas.delete('Añejo');
   if (vistas.has('Gran reserva')) vistas.delete('Reserva');
+  if (vistas.has('Tapa azul')) vistas.delete('Azul');
+  if (vistas.has('Tapa verde')) vistas.delete('Verde');
   return [...vistas];
 }
 
@@ -253,12 +292,20 @@ export function puntuar(producto, palabras) {
   return puntos - 2 * variantesNoPedidas(producto, palabras).length;
 }
 
+// Artículos que no son bebida aunque lleven la marca ("Destapador Cerveza Águila").
+const NO_BEBIDA = new Set(['destapador', 'destapadores', 'abridor', 'camiseta', 'gorra', 'llavero', 'nevera', 'hielera', 'cava', 'decoracion', 'adorno', 'iman', 'mesa', 'silla', 'cojin', 'vela', 'termo', 'mug', 'pocillo', 'copa', 'copas']);
+
+export function esBebida(producto, palabras = []) {
+  const pedidas = new Set(palabras);
+  return !tokens(producto.nombre).some((t) => NO_BEBIDA.has(t) && !pedidas.has(t));
+}
+
 // Filtra y ordena por relevancia: quedan los productos con todas las palabras
 // obligatorias; las de categoría solo suman puntos.
 export function filtrarProductos(productos, palabras) {
   if (!obligatorias(palabras).length) return [];
   return productos
-    .filter((p) => Number.isFinite(p.precio) && p.precio > 0 && coincideBusqueda(p, palabras))
+    .filter((p) => Number.isFinite(p.precio) && p.precio > 0 && coincideBusqueda(p, palabras) && esBebida(p, palabras))
     .map((p) => ({ producto: p, puntos: puntuar(p, palabras) }))
     .sort((a, b) => b.puntos - a.puntos || a.producto.precio - b.producto.precio)
     .map((x) => x.producto);
