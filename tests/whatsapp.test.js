@@ -40,7 +40,7 @@ globalThis.fetch = async (url, opciones = {}) => {
 };
 
 const { limpiarNumero, textoParaPlantilla, enviarWhatsapp, guardarWhatsapp, leerWhatsapp, vinculoGreen, desvincularGreen } = await import('../src/whatsapp.js');
-const { notificarAvisos, mensajeWhatsapp } = await import('../src/push.js');
+const { notificarAvisos, mensajeWhatsapp, nombreCorto } = await import('../src/push.js');
 const { avisosDeAtencion } = await import('../src/mitienda.js');
 const MEDIODIA = Date.parse('2026-11-02T17:00:00Z'); // 12:00 en Colombia, fuera del silencio
 
@@ -91,13 +91,30 @@ test('todos los avisos llegan en un solo mensaje con el enlace a la app', async 
   assert.equal(r.whatsapp.enviado, true);
   assert.equal(enviados.length, 1, 'un solo mensaje');
   const texto = enviados[0].cuerpo.text.body;
-  assert.match(texto, /^\*Mejor Precio\* · 4 avisos/);
-  assert.match(texto, /Bajó: Aguila 330/);
-  assert.match(texto, /Compra en TRIVO: 2 precios para aprobar/);
-  assert.match(texto, /Hay que pedir: Hielo 3 kg\*\n {2}Quedan 4 en TRIVO \(mínimo 10\)/);
-  assert.match(texto, /Éxito no está respondiendo/);
-  assert.match(texto, /Abrir: https:\/\/mejor-precio\.example\/$/);
-  assert.match(mensajeWhatsapp([avisos[1]]), /Abrir: https:\/\/mejor-precio\.example\/#mitienda/);
+  assert.match(texto, /^\*Mejor Precio\* · lun, 2 de nov, 12:00 p\. ?m\.\n💲 precios por aprobar · 📦 1 por pedir · 🏷️ 1 para comprar · 🛠️ 1 de conexión\n/);
+  // En orden de urgencia: aprobar, pedir, comprar, conexiones.
+  assert.ok(texto.indexOf('Precios por aprobar') < texto.indexOf('Por pedir') && texto.indexOf('Por pedir') < texto.indexOf('Para comprar') && texto.indexOf('Para comprar') < texto.indexOf('Conexiones'));
+  assert.match(texto, /• Compra en TRIVO: 2 precios para aprobar\n {3}Aguila: \$3\.500 → \$3\.300\n↳ https:\/\/mejor-precio\.example\/#mitienda/);
+  assert.match(texto, /• Hielo 3 kg — quedan 4/);
+  assert.match(texto, /• Aguila 330\n {3}Makro \*\$\s2\.900\* \(bajó de \$\s3\.300\)/);
+  assert.match(texto, /Éxito no está respondiendo[\s\S]*#estado$/);
+  assert.match(mensajeWhatsapp([avisos[1]]), /^\*Mejor Precio\* · [^\n]+\n\n💲/, 'con una sola sección no hace falta el resumen');
+});
+
+test('WhatsApp: variantes juntas, lo que se pierde y el precio con tu margen', () => {
+  const texto = mensajeWhatsapp([
+    { tipo: 'bajo-minimo', nombre: 'Aguila x 330ml (lata) Caliente', base: 'Aguila x 330ml (lata)', variante: 'Caliente', existencias: 0, vendidos: 30 },
+    { tipo: 'bajo-minimo', nombre: 'Aguila x 330ml (lata) Fria', base: 'Aguila x 330ml (lata)', variante: 'Fria', existencias: 0, vendidos: 30 },
+    { tipo: 'bajo-minimo', nombre: 'Poker x 330ml (lata)', base: 'Poker x 330ml (lata)', existencias: 0, vendidos: 2 },
+    { tipo: 'bajo-costo', nombre: 'Miller x 24', precio: 38000, costo: 42000, margen: 20, sugerido: 52500 },
+    { tipo: 'bajo-costo', nombre: 'Caja Miller + Hielo', precio: 35000, costo: 43000, margen: 20, sugerido: 53800 },
+  ], { ahora: MEDIODIA });
+  assert.match(texto, /🔴 2 bajo el costo · 📦 2 por pedir/);
+  assert.match(texto, /📦 \*Por pedir\* · agotados en TRIVO\n• Aguila 330ml lata \(Caliente y Fria\) · vendiste 30 en 30 días\n• Poker 330ml lata · vendiste 2 en 30 días/);
+  // Primero lo que más se pierde.
+  assert.match(texto, /• Caja Miller \+ Hielo\n {3}vendes \$\s35\.000 · cuesta \$\s43\.000 → \*pierdes \$\s8\.000\*\n {3}con tu margen \(20 %\): \*\$\s53\.800\*\n• Miller 24\n/);
+  assert.ok(texto.indexOf('debajo del costo') < texto.indexOf('Por pedir'), 'perder plata va primero');
+  assert.equal(nombreCorto('Cerveza Sixpack CERVEZA COSTEÑA BACANA 1980 ml'), 'Cerveza Sixpack Costeña Bacana 1980 ml');
 });
 
 test('en el horario de silencio se guardan y salen todos juntos después', async () => {
@@ -107,7 +124,7 @@ test('en el horario de silencio se guardan y salen todos juntos después', async
   assert.equal(enviados.length, 0);
   await notificarAvisos([{ tipo: 'volvio', nombre: 'Poker', tienda: 'Olímpica', precio: 3000 }], { ahora: MEDIODIA });
   assert.equal(enviados.length, 1);
-  assert.match(enviados[0].cuerpo.text.body, /2 avisos[\s\S]*Se agotó: Poker[\s\S]*Volvió a haber: Poker/);
+  assert.match(enviados[0].cuerpo.text.body, /Volvió a Olímpica|volvió a Olímpica[\s\S]*Se agotó: Poker/);
   assert.ok((await leerWhatsapp()).ultimo.t);
 });
 

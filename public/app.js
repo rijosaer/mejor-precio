@@ -44,6 +44,15 @@ function volver() {
   refrescar();
 }
 
+// Enlaces de los avisos (WhatsApp y push): «/#mitienda», «/#lista»… abren esa vista.
+function abrirEnlace(vista) {
+  if (!VISTAS.includes(vista) || ['entrar', 'buscar'].includes(vista) || !$('#vista-entrar').hidden) return false;
+  if (vista === 'ajustes') abrirAjustes();
+  else mostrar(vista);
+  return true;
+}
+window.addEventListener('hashchange', () => abrirEnlace(location.hash.slice(1)));
+
 // ── Apariencia ─────────────────────────────────────────────────────────────
 function aplicarApariencia() {
   const { tema, letra } = ajustes().apariencia;
@@ -222,7 +231,7 @@ async function iniciar() {
   if (propuestaVieja()) analizarLista().catch(() => {});
   const q = new URLSearchParams(location.search).get('q');
   if (q) buscar(q);
-  else $('#q').focus();
+  else if (!abrirEnlace(location.hash.slice(1))) $('#q').focus();
 }
 
 if ('serviceWorker' in navigator) {
@@ -242,7 +251,7 @@ if ('serviceWorker' in navigator) {
     if (e.data?.tipo === 'abrir' && e.data.q) {
       mostrar('buscar');
       buscar(e.data.q);
-    }
+    } else if (e.data?.tipo === 'abrir' && e.data.vista) abrirEnlace(e.data.vista);
   });
 }
 

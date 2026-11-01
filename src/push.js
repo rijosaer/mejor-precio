@@ -2,7 +2,7 @@
 // aunque la app esté cerrada. Necesita las claves VAPID en las variables
 // VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY (se crean con `npm run claves-push`).
 import { actualizar, leer } from './almacen.js';
-import { enSilencio, leerConfig } from './config.js';
+import { enSilencio, leerConfig, ZONA } from './config.js';
 import { enviarWhatsapp, leerWhatsapp, whatsappActivo } from './whatsapp.js';
 
 const MAX_SUSCRIPCIONES = 10;
@@ -122,16 +122,132 @@ function enlace(ruta = '/') {
   return base ? `${base.replace(/\/$/, '')}${ruta}` : '';
 }
 
-// Un solo mensaje de WhatsApp con todos los avisos pendientes.
-export function mensajeWhatsapp(avisos) {
-  const lineas = avisos.slice(0, 25).map((a) => {
-    const t = textoAviso(a);
-    return `• *${t.title}*${t.body ? `\n  ${t.body}` : ''}`;
-  });
-  if (avisos.length > 25) lineas.push(`… y ${avisos.length - 25} más en la app.`);
-  const ruta = avisos.some((a) => a.url) && avisos.every((a) => a.url === avisos[0].url) ? avisos[0].url : '/';
-  const link = enlace(ruta);
-  return [`*Mejor Precio* · ${avisos.length === 1 ? '1 aviso' : `${avisos.length} avisos`}`, ...lineas, link ? `\nAbrir: ${link}` : ''].filter(Boolean).join('\n');
+// ── Mensaje de WhatsApp ─────────────────────────────────────────────────────
+// Un solo mensaje con todos los avisos pendientes, por secciones y en orden de
+// urgencia: lo que hace perder plata, lo que espera tu aprobación, lo que hay
+// que pedir, las oportunidades de compra y el resto. Cada sección con su enlace.
+const MAX_POR_SECCION = 8;
+
+// «CERVEZA COSTEÑA BACANA x 330ml (lata)» → «Cerveza Costeña Bacana 330ml lata»,
+// sin palabras repetidas («Cerveza Sixpack CERVEZA…»).
+export function nombreCorto(nombre) {
+  const vistas = new Set();
+  return String(nombre)
+    .replace(/\s+x\s+(?=\d)/gi, ' ')
+    .replace(/\s*\((lata|botella|vidrio)\)/gi, ' $1')
+    .split(/\s+/)
+    .map((w) => (/^[A-ZÁÉÍÓÚÑÜ]{4,}$/.test(w) ? w[0] + w.slice(1).toLowerCase() : w))
+    .filter((w) => {
+      const k = w.toLowerCase();
+      if (k.length > 3 && vistas.has(k)) return false;
+      vistas.add(k);
+      return true;
+    })
+    .join(' ')
+    .trim();
+}
+
+const plata = (n) => pesos.format(Math.round(n));
+const vendidosTexto = (n) => (n > 0 ? ` · vendiste ${n} en 30 días` : '');
+
+// Un producto por línea aunque tenga variantes: «Aguila Original 330ml lata (Caliente y Fria)».
+function porPedir(avisos) {
+  const grupos = new Map();
+  for (const a of avisos) {
+    const clave = a.base || a.nombre;
+    const g = grupos.get(clave) || { nombre: clave, variantes: [], existencias: 0, vendidos: 0 };
+    if (a.variante && a.base) g.variantes.push(a.variante);
+    g.existencias += Math.max(0, Number(a.existencias) || 0);
+    g.vendidos = Math.max(g.vendidos, Number(a.vendidos) || 0); // las ventas son del producto, no de la variante
+    grupos.set(clave, g);
+  }
+  // Si todos están agotados, el título lo dice una vez (todosAgotados) y cada línea no lo repite.
+  const todos = [...grupos.values()].every((g) => g.existencias === 0);
+  return [...grupos.values()]
+    .sort((a, b) => b.vendidos - a.vendidos || a.nombre.localeCompare(b.nombre))
+    .map((g) => {
+      const variantes = g.variantes.length ? ` (${g.variantes.join(' y ')})` : '';
+      const estado = todos ? '' : g.existencias > 0 ? ` — quedan ${g.existencias}` : ' — agotado';
+      return `• ${nombreCorto(g.nombre)}${variantes}${estado}${vendidosTexto(g.vendidos)}`;
+    });
+}
+const todosAgotados = (avisos) => avisos.every((a) => !(Number(a.existencias) > 0));
+
+function lineaCompra(a) {
+  const nombre = nombreCorto(a.nombre);
+  switch (a.tipo) {
+    case 'oferta': {
+      const pct = a.a > a.precio ? Math.round((1 - a.precio / a.a) * 100) : null;
+      return `• ${nombre}\n   ${a.tienda} *${plata(a.precio)}*${a.a ? ` (antes ${plata(a.a)}${pct ? `, −${pct} %` : ''})` : ''}`;
+    }
+    case 'dulce':
+      return `• ${nombre}\n   ${a.tienda} *${plata(a.precio)}* (bajó de ${plata(a.antes)})`;
+    case 'umbral':
+      return `• ${nombre}\n   ${a.tienda} *${plata(a.precio)}* (tu objetivo: ${plata(a.umbral)})`;
+    case 'volvio':
+      return `• ${nombre}\n   volvió a ${a.tienda} a *${plata(a.precio)}*`;
+    default:
+      return lineaGeneral(a);
+  }
+}
+
+function lineaGeneral(a) {
+  const t = textoAviso(a);
+  return `• ${t.title}${t.body ? `\n   ${t.body}` : ''}`;
+}
+
+const SECCIONES = [
+  {
+    tipos: ['bajo-costo'],
+    titulo: '🔴 *Vendes por debajo del costo*',
+    resumen: (n) => `🔴 ${n} bajo el costo`,
+    ruta: () => '/#mitienda',
+    lineas: (avisos) =>
+      avisos
+        .sort((a, b) => b.costo - b.precio - (a.costo - a.precio))
+        .map(
+          (a) =>
+            `• ${nombreCorto(a.nombre)}\n   vendes ${plata(a.precio)} · cuesta ${plata(a.costo)} → *pierdes ${plata(a.costo - a.precio)}*` +
+            (a.sugerido ? `\n   con tu margen (${a.margen} %): *${plata(a.sugerido)}*` : ''),
+        ),
+  },
+  { tipos: ['precio-compra', 'recordatorio'], titulo: '💲 *Precios por aprobar*', resumen: () => '💲 precios por aprobar', ruta: () => '/#mitienda', lineas: (a) => a.map(lineaGeneral) },
+  {
+    tipos: ['bajo-minimo'],
+    titulo: (avisos) => `📦 *Por pedir*${todosAgotados(avisos) ? ' · agotados en TRIVO' : ''}`,
+    resumen: (_, lineas) => `📦 ${lineas.length} por pedir`,
+    ruta: () => '/#mitienda',
+    lineas: porPedir,
+    max: 15,
+  },
+  {
+    tipos: ['oferta', 'dulce', 'umbral', 'volvio'],
+    titulo: '🏷️ *Para comprar barato*',
+    resumen: (n) => `🏷️ ${n} para comprar`,
+    ruta: (avisos) => (new Set(avisos.map((a) => a.q)).size === 1 && avisos[0].q ? `/?q=${encodeURIComponent(avisos[0].q)}` : '/#lista'),
+    lineas: (a) => a.map(lineaCompra),
+  },
+  { tipos: ['agota', 'agotado', 'sinstock'], titulo: '⚠️ *En las tiendas*', resumen: (n) => `⚠️ ${n} en tiendas`, ruta: () => '/#lista', lineas: (a) => a.map(lineaGeneral) },
+  { tipos: ['tienda', 'trivo'], titulo: '🛠️ *Conexiones*', resumen: (n) => `🛠️ ${n} de conexión`, ruta: () => '/#estado', lineas: (a) => a.map(lineaGeneral) },
+  { tipos: ['semanal'], titulo: '📊 *Resumen de la semana*', resumen: () => '📊 resumen semanal', ruta: () => '/', lineas: (a) => a.map((x) => x.detalle || textoAviso(x).body) },
+];
+const OTROS = { titulo: '🔔 *Otros avisos*', resumen: (n) => `🔔 ${n} más`, ruta: (a) => a.find((x) => x.url)?.url || '/', lineas: (a) => a.map(lineaGeneral) };
+
+export function mensajeWhatsapp(avisos, { ahora = Date.now() } = {}) {
+  const conocidos = new Set(SECCIONES.flatMap((s) => s.tipos));
+  const partes = [...SECCIONES.map((s) => [s, avisos.filter((a) => s.tipos.includes(a.tipo))]), [OTROS, avisos.filter((a) => !conocidos.has(a.tipo))]]
+    .filter(([, lista]) => lista.length)
+    .map(([s, lista]) => {
+      const lineas = s.lineas([...lista]);
+      const max = s.max || MAX_POR_SECCION;
+      const extra = lineas.length > max ? [`   … y ${lineas.length - max} más en la app`] : [];
+      const link = enlace(s.ruta(lista));
+      const titulo = typeof s.titulo === 'function' ? s.titulo(lista) : s.titulo;
+      return { resumen: s.resumen(lista.length, lineas), texto: [titulo, ...lineas.slice(0, max), ...extra, link ? `↳ ${link}` : ''].filter(Boolean).join('\n') };
+    });
+  const fecha = new Intl.DateTimeFormat('es-CO', { timeZone: ZONA, weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(ahora));
+  const encabezado = [`*Mejor Precio* · ${fecha}`, partes.length > 1 ? partes.map((p) => p.resumen).join(' · ') : ''].filter(Boolean).join('\n');
+  return [encabezado, ...partes.map((p) => p.texto)].join('\n\n');
 }
 
 // Avisos → notificaciones push y WhatsApp. Con más de 3 a la vez el push manda
@@ -148,7 +264,7 @@ export async function notificarAvisos(avisos, { ahora = Date.now() } = {}) {
   await actualizar('push-pendientes', () => []);
   const resultado = { enviadas: 0 };
   if (conWhatsapp) {
-    resultado.whatsapp = await enviarWhatsapp(mensajeWhatsapp(pendientes)).catch((e) => (console.error('[whatsapp]', e.message), { enviado: false, motivo: e.message }));
+    resultado.whatsapp = await enviarWhatsapp(mensajeWhatsapp(pendientes, { ahora })).catch((e) => (console.error('[whatsapp]', e.message), { enviado: false, motivo: e.message }));
   }
   if (!pushActivo()) return resultado;
   if (pendientes.length > 3) {

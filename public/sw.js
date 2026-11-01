@@ -94,7 +94,8 @@ self.addEventListener('notificationclick', (e) => {
       if (abierta) {
         await abierta.focus();
         const q = destino.searchParams.get('q');
-        if (q) abierta.postMessage({ tipo: 'abrir', q });
+        const vista = destino.hash.slice(1);
+        if (q || vista) abierta.postMessage({ tipo: 'abrir', q, vista });
         return;
       }
       await self.clients.openWindow(destino.href);

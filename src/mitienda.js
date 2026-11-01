@@ -301,7 +301,7 @@ export async function sincronizarTrivo({ ahora = Date.now(), dias = 30 } = {}) {
   if (nuevas.length) {
     avisos.push({ tipo: 'precio-compra', title: `Compra en TRIVO: ${nuevas.length} ${nuevas.length === 1 ? 'precio' : 'precios'} para aprobar`, body: nuevas.slice(0, 3).map((x) => `${x.nombre}: ${pesosTexto(x.precioActual)} → ${pesosTexto(x.precioNuevo)}`).join(' · '), url: '/#mitienda', t: ahora });
   }
-  avisos.push(...avisosDeAtencion(carta, productos, anterior, ahora));
+  avisos.push(...avisosDeAtencion(carta, productos, anterior, ahora, await leerMargenes()));
   if (anterior?.error) avisos.push({ tipo: 'trivo', title: 'TRIVO volvió a responder', body: 'Costos, existencias y ventas al día.', url: '/#mitienda', t: ahora });
   if (avisos.length) await notificarAvisos(avisos, { ahora }).catch((e) => console.error('[push]', e.message));
   return { ...doc, costos, conCosto: Object.keys(reales).length, propuestasNuevas: nuevas.length };
@@ -311,16 +311,20 @@ const pesosTexto = (n) => `$${Math.round(n).toLocaleString('es-CO')}`;
 
 // Avisos de lo que pide atención en TRIVO, solo cuando aparece: un producto que
 // baja del mínimo de existencias o un precio que queda por debajo del costo.
-export function avisosDeAtencion(carta, productos, anterior, ahora = Date.now()) {
+// Cada aviso lleva el producto sin la variante (para juntar «Caliente» y «Fría»
+// en WhatsApp), lo vendido en 30 días y, si está bajo el costo, el precio con tu margen.
+export function avisosDeAtencion(carta, productos, anterior, ahora = Date.now(), margenes = null) {
   const avisos = [];
   for (const p of carta) {
     const x = productos[p.id];
     const antes = anterior?.productos?.[p.id];
+    const comun = { clave: p.id, nombre: p.nombre, base: p.base || p.nombre, variante: p.variante || null, vendidos: x?.ventas?.unidades ?? null, url: '/#mitienda', t: ahora };
     if (x?.fuente === 'directo' && x.bajo && !antes?.bajo && x.existencias !== null) {
-      avisos.push({ tipo: 'bajo-minimo', clave: p.id, nombre: p.nombre, existencias: x.existencias, minimo: x.minimo ?? 0, url: '/#mitienda', t: ahora });
+      avisos.push({ tipo: 'bajo-minimo', ...comun, existencias: x.existencias, minimo: x.minimo ?? 0 });
     }
     if (x?.bajoCosto && !antes?.bajoCosto) {
-      avisos.push({ tipo: 'bajo-costo', clave: p.id, nombre: p.nombre, precio: p.precio, costo: x.costo, url: '/#mitienda', t: ahora });
+      const margen = margenes?.porProducto?.[p.id] ?? margenes?.general ?? MARGEN_POR_DEFECTO;
+      avisos.push({ tipo: 'bajo-costo', ...comun, precio: p.precio, costo: x.costo, margen, sugerido: precioConMargen(x.costo, margen) });
     }
   }
   return avisos;
