@@ -9,7 +9,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "probar": "node scripts/probar.js",
-    "test": "node --test \"tests/*.test.js\"",
+    "test": "node scripts/pruebas.js",
     "claves-push": "node scripts/claves-push.js",
     "prueba-local": "node scripts/servidor-prueba.js"
   },
