@@ -4,7 +4,7 @@
 // salen de TRIVO; sin él, los costos se anotan a mano.
 import { ajustes, guardarAjustes } from './datos.js';
 import { escribirCsv } from './csv.js';
-import { limpiarRegla, resumenInventario, sugerirPrecio } from './precios.js';
+import { limpiarMargen, limpiarRegla, MARGEN_POR_DEFECTO, precioConMargen, resumenInventario, sugerirPrecio } from './precios.js';
 import { subirAjustes } from './sync.js';
 import { $, acciones, api, boton, descargar, el, guardado, hace, pesos, presentacion } from './util.js';
 
@@ -13,6 +13,7 @@ let estado = guardado('mp-mitienda') || null; // { miTienda, productos, costos }
 let filtro = 'todos';
 let analizando = false;
 let leyendoTrivo = false;
+let aplicando = false;
 const VIGENCIA_TRIVO = 6 * 60 * 60_000;
 
 const regla = () => limpiarRegla(ajustes().miTiendaRegla);
@@ -105,6 +106,21 @@ function tarjeta(p) {
   });
   costo.append(entrada);
   rejilla.append(costo);
+  if (estado.trivo?.activo) {
+    const propio = estado.margenes?.porProducto?.[p.id];
+    const margen = el('label', '', 'Tu margen (%)');
+    const m = el('input');
+    m.type = 'number';
+    m.inputMode = 'decimal';
+    m.min = '0';
+    m.max = '89';
+    m.step = '1';
+    m.placeholder = `${estado.margenes?.general ?? MARGEN_POR_DEFECTO} (general)`;
+    m.value = propio ?? '';
+    m.addEventListener('change', () => guardarMargen({ porProducto: { [p.id]: m.value === '' ? null : Number(m.value) } }, m));
+    margen.append(m);
+    rejilla.append(margen);
+  }
   caja.append(rejilla);
   if (deTrivo) caja.append(el('p', 'ayuda', p.trivo.fuente === 'calculado' ? `${p.trivo.detalle}. Si lo cambias aquí, la próxima lectura de TRIVO lo vuelve a poner.` : 'Costo de compra en TRIVO. Si lo cambias aquí, la próxima lectura de TRIVO lo vuelve a poner.'));
 
@@ -120,6 +136,8 @@ function tarjeta(p) {
     if (a.motivo === 'costo') salida.append(el('p', 'ayuda', 'El mercado está por debajo de tu costo + margen mínimo: se sugiere el precio en el que no pierdes.'));
   } else if (a.estado !== 'sin-mercado') linea('Sugerido', 'Mantener');
   if (a.piso) linea('Precio mínimo con tu margen', pesos.format(a.piso));
+  const conMargen = precioTrivo(p);
+  if (conMargen) linea(`Con tu margen de ${conMargen.margen} % (TRIVO)`, conMargen.precio === (p.precioAntes ?? p.precio) ? `${pesos.format(conMargen.precio)} · ya está` : pesos.format(conMargen.precio));
   if (salida.childElementCount) caja.append(salida);
 
   const botones = el('div', 'aj-botones');
@@ -161,6 +179,7 @@ function pintar() {
   }
   $('#mt-nombre').textContent = estado.nombre || 'Agua Pure';
   pintarTrivo();
+  pintarPropuestas();
   const analizados = estado.productos.map((p) => ({ p, a: analisis(p) }));
   const cuenta = (f) => analizados.filter(({ a }) => GRUPOS[f](a)).length;
   const dato = (n, texto, clave, clase = '') => {
@@ -188,6 +207,144 @@ function pintar() {
   $('#mt-actualizar').textContent = viejos ? `Comparar ${viejos} pendientes` : 'Comparar todo de nuevo';
 }
 
+// Precio con tu margen esperado, como lo calcula el servidor para las propuestas.
+function precioTrivo(p) {
+  if (!estado?.trivo?.activo) return null;
+  const costo = estado.costos?.[p.id];
+  const margen = estado.margenes?.porProducto?.[p.id] ?? estado.margenes?.general ?? MARGEN_POR_DEFECTO;
+  const descuento = p.precioAntes ? p.precioAntes - p.precio : 0;
+  const precio = precioConMargen(costo, margen, { fria: /fr[ií]a/i.test(p.variante || ''), recargoFria: regla().recargoFria, descuento });
+  return precio ? { precio, margen } : null;
+}
+
+async function guardarMargen(cambios, entrada) {
+  try {
+    const { margenes } = await api('/api/mi-tienda/margen', { method: 'PUT', cuerpo: cambios });
+    estado.margenes = margenes;
+    guardado('mp-mitienda', estado);
+    pintar();
+  } catch (error) {
+    entrada.setCustomValidity(error.message);
+    entrada.reportValidity();
+  }
+}
+
+const textoMotivo = (x) =>
+  x.motivo === 'compra'
+    ? `Compra${x.compra?.fecha ? ` del ${new Date(x.compra.fecha).toLocaleDateString('es-CO')}` : ''}${x.compra?.costo ? ` a ${pesos.format(x.compra.costo)} c/u` : ''}`
+    : x.motivo === 'costo'
+      ? 'Cambió el costo en TRIVO'
+      : 'Calculado con tu margen';
+
+async function accionPrecio(ruta, cuerpo, metodo = 'POST') {
+  const datos = await api(ruta, { method: metodo, cuerpo });
+  estado = { ...datos, nombre: estado.nombre };
+  guardado('mp-mitienda', estado);
+}
+
+async function aplicarUna(x, b) {
+  if (aplicando) return;
+  const cambio = ((x.precioNuevo - x.precioActual) / x.precioActual) * 100;
+  if (Math.abs(cambio) >= 30 && !confirm(`${x.nombre}: el precio cambia ${cambio > 0 ? '+' : ''}${cambio.toFixed(0)} % (${pesos.format(x.precioActual)} → ${pesos.format(x.precioNuevo)}). ¿Aplicar en TRIVO?`)) return;
+  aplicando = true;
+  if (b) b.disabled = true;
+  try {
+    await accionPrecio('/api/mi-tienda/aplicar', { id: x.id });
+    $('#mt-estado').replaceChildren(el('p', '', `Listo: ${x.nombre} quedó en ${pesos.format(x.precioNuevo)} en TRIVO.`));
+  } catch (error) {
+    $('#mt-estado').replaceChildren(el('p', 'error', `${x.nombre}: ${error.message}`));
+  } finally {
+    aplicando = false;
+    pintar();
+  }
+}
+
+async function aplicarTodas() {
+  const lista = [...(estado?.propuestas || [])];
+  if (!lista.length || aplicando) return;
+  if (!confirm(`¿Aplicar en TRIVO los ${lista.length} precios propuestos?\n\n${lista.map((x) => `${x.nombre}: ${pesos.format(x.precioActual)} → ${pesos.format(x.precioNuevo)}`).join('\n')}`)) return;
+  aplicando = true;
+  const b = $('#mt-aplicar-todos');
+  b.disabled = true;
+  let bien = 0;
+  const errores = [];
+  for (const x of lista) {
+    $('#mt-estado').replaceChildren(el('p', '', `Aplicando ${bien + errores.length + 1} de ${lista.length}: ${x.nombre}…`));
+    try {
+      await accionPrecio('/api/mi-tienda/aplicar', { id: x.id });
+      bien++;
+    } catch (error) {
+      errores.push(`${x.nombre}: ${error.message}`);
+    }
+  }
+  $('#mt-estado').replaceChildren(el('p', errores.length ? 'error' : '', `Aplicados ${bien} de ${lista.length}.${errores.length ? ` ${errores.join(' · ')}` : ''}`));
+  aplicando = false;
+  b.disabled = false;
+  pintar();
+}
+
+function pintarPropuestas() {
+  const caja = $('#mt-margen-caja');
+  const activo = estado?.trivo?.activo;
+  caja.hidden = !activo;
+  if (!activo) return;
+  const entrada = $('#mt-margenEsperado');
+  if (document.activeElement !== entrada) entrada.value = estado.margenes?.general ?? MARGEN_POR_DEFECTO;
+  const lista = estado.propuestas || [];
+  const zona = $('#mt-propuestas');
+  zona.replaceChildren();
+  const todos = $('#mt-aplicar-todos');
+  todos.hidden = lista.length < 2;
+  todos.textContent = `Aplicar todos (${lista.length})`;
+  if (!lista.length) zona.append(el('p', 'ayuda', 'No hay precios por aprobar. Cuando cargues una compra en TRIVO, la propuesta aparece aquí (se revisa cada hora o al tocar «Leer TRIVO»).'));
+  for (const x of lista) {
+    const fila = el('div', 'mt-propuesta');
+    const izq = el('div');
+    izq.append(
+      el('b', '', x.nombre),
+      el('p', 'ayuda', `${textoMotivo(x)} · costo ${x.costoAntes && x.costoAntes !== x.costo ? `${pesos.format(x.costoAntes)} → ` : ''}${pesos.format(x.costo)} · margen ${x.margen} %${x.descuento ? ` · promo −${pesos.format(x.descuento)}` : ''}`),
+      el('p', 'ayuda', `Margen real: ${x.margenActual !== null ? `${x.margenActual.toFixed(1)} %` : '—'} → ${x.margenNuevo !== null ? `${x.margenNuevo.toFixed(1)} %` : '—'}`),
+    );
+    const der = el('div', 'mt-propuesta-precio');
+    der.append(el('s', '', pesos.format(x.precioActual)), el('br'), el('strong', '', pesos.format(x.precioNuevo)));
+    const botones = el('div', 'aj-botones');
+    const aplicar = boton('Aplicar en TRIVO', 'mini', (e) => aplicarUna(x, e.target));
+    botones.append(
+      aplicar,
+      boton('Descartar', 'mini', async () => {
+        await accionPrecio(`/api/mi-tienda/propuestas?id=${encodeURIComponent(x.id)}`, {}, 'DELETE').catch(() => {});
+        pintar();
+      }),
+    );
+    fila.append(izq, der, botones);
+    zona.append(fila);
+  }
+  const historial = estado.historial || [];
+  $('#mt-historial-caja').hidden = !historial.length;
+  const h = $('#mt-historial');
+  h.replaceChildren();
+  for (const c of historial) {
+    const fila = el('div', 'mt-cambio');
+    const texto = el('span', 'ayuda', `${c.nombre}: ${pesos.format(c.antes)} → ${pesos.format(c.despues)} · ${c.motivo === 'deshacer' ? 'deshecho' : `margen ${c.margen} %`} · ${hace(c.t)}`);
+    fila.append(texto);
+    if (!c.deshecho && c.motivo !== 'deshacer') {
+      fila.append(
+        boton('Deshacer', 'mini', async (e) => {
+          if (!confirm(`¿Volver ${c.nombre} a ${pesos.format(c.antes)} en TRIVO?`)) return;
+          e.target.disabled = true;
+          try {
+            await accionPrecio('/api/mi-tienda/deshacer', { id: c.id });
+          } catch (error) {
+            $('#mt-estado').replaceChildren(el('p', 'error', error.message));
+          }
+          pintar();
+        }),
+      );
+    }
+    h.append(fila);
+  }
+}
+
 function pintarTrivo() {
   const t = estado?.trivo;
   const b = $('#mt-trivo');
@@ -206,7 +363,7 @@ function pintarTrivo() {
   partes.push(t.t ? `TRIVO leído ${hace(t.t)} (solo lectura): costos de compra, existencias y ventas del ${t.desde} al ${t.hasta}.` : 'TRIVO conectado (solo lectura). Toca «Leer TRIVO» para traer costos, existencias y ventas.');
   if (t.sinPareja?.length) partes.push(`Sin pareja en TRIVO: ${t.sinPareja.join(', ')}.`);
   if (t.error) partes.push(`Último intento con error: ${t.error}.`);
-  partes.push('Los precios no se cambian en TRIVO desde aquí.');
+  partes.push('En TRIVO solo se cambia el precio de venta, y solo cuando apruebas una propuesta.');
   nota.textContent = partes.join(' ');
 }
 
@@ -311,5 +468,21 @@ export function configurarMiTienda() {
   $('#mt-actualizar').addEventListener('click', compararTodos);
   $('#mt-exportar').addEventListener('click', exportar);
   $('#mt-trivo').addEventListener('click', () => leerTrivo());
+  $('#mt-aplicar-todos').addEventListener('click', aplicarTodas);
+  $('#mt-margenEsperado').addEventListener('change', (e) => {
+    if (limpiarMargen(e.target.value) === null) return;
+    guardarMargen({ general: Number(e.target.value) }, e.target);
+  });
+  $('#mt-proponer').addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    try {
+      await accionPrecio('/api/mi-tienda/propuestas', {});
+      $('#mt-estado').replaceChildren(el('p', '', `${estado.propuestas.length} productos con un precio distinto al de tu margen.`));
+    } catch (error) {
+      $('#mt-estado').replaceChildren(el('p', 'error', error.message));
+    }
+    e.target.disabled = false;
+    pintar();
+  });
   for (const campo of ['sobreMinimo', 'recargoFria', 'tolerancia', 'margenMin', 'redondeo']) $(`#mt-${campo}`).addEventListener('change', guardarRegla);
 }

@@ -5,11 +5,13 @@
 import { createHash } from 'node:crypto';
 import { actualizar, leer } from './almacen.js';
 import { comparar } from './comparador.js';
-import { leerConfig } from './config.js';
+import { leerAjustesCompartidos, leerConfig } from './config.js';
 import { extraerMl, normalizar, tokens } from './normalizar.js';
 import { leerProveedores, idTienda } from './proveedores.js';
 import * as aguapure from './tiendas/aguapure.js';
-import { leerTrivo, trivoActivo } from './trivo.js';
+import { cambiarPrecio, leerTrivo, trivoActivo } from './trivo.js';
+import { limpiarMargen, limpiarRegla, MARGEN_POR_DEFECTO, margenSobrePrecio, precioConMargen } from '../public/precios.js';
+import { notificarAvisos } from './push.js';
 
 const VIGENCIA_HORAS = 20;
 const idDoc = (id) => `mitienda/${createHash('sha1').update(String(id)).digest('hex').slice(0, 20)}`;
@@ -128,13 +130,23 @@ export async function guardarCostos(cambios) {
 export async function estadoMiTienda() {
   const config = await leerConfig();
   if (!config.miTienda) return { miTienda: null, productos: [], costos: {} };
-  const [productos, costos, trivo] = await Promise.all([catalogoPropio(config.miTienda), leerCostos(), leer('mitienda-trivo')]);
+  const [productos, costos, trivo, propuestas, historial, margenes] = await Promise.all([
+    catalogoPropio(config.miTienda),
+    leerCostos(),
+    leer('mitienda-trivo'),
+    leerPropuestas(),
+    leerHistorialPrecios(),
+    leerMargenes(),
+  ]);
   const resultados = await Promise.all(productos.map((p) => leer(idDoc(p.id))));
   const deTrivo = config.miTienda === 'aguapure' && trivo;
   return {
     miTienda: config.miTienda,
     productos: productos.map((p, i) => ({ ...p, resultado: resultados[i], trivo: deTrivo ? trivo.productos?.[p.id] || null : null })),
     costos,
+    margenes,
+    propuestas: config.miTienda === 'aguapure' ? propuestas : [],
+    historial: config.miTienda === 'aguapure' ? historial.slice(0, 20) : [],
     trivo: config.miTienda === 'aguapure' ? { activo: trivoActivo(), t: trivo?.t ?? null, desde: trivo?.desde ?? null, hasta: trivo?.hasta ?? null, dias: trivo?.dias ?? null, sinPareja: trivo?.sinPareja ?? [], error: trivo?.error ?? null } : null,
   };
 }
@@ -152,7 +164,7 @@ export async function refrescarMiTienda({ maximo = 4, ahora = Date.now() } = {})
 }
 
 // ── TRIVO: costos reales, existencias y ventas ──────────────────────────────
-const VIGENCIA_TRIVO_HORAS = 6;
+const VIGENCIA_TRIVO_HORAS = 1;
 
 // Palabras de la marca: «Caja de Club Colombia x 330 ml + Hielo» → [club, colombia].
 const marca = (nombre) => tokens(String(nombre).split(/\s+x\s+/i)[0]).filter((t) => !SOBRAN.has(t) && !/\d/.test(t));
@@ -240,6 +252,7 @@ export function emparejarTrivo(carta, { productos: reventa, stock, ventas }) {
       existencias: latas,
       alcanza: latas === null ? null : Math.max(0, Math.floor(latas / p.unidades)),
       base: base.nombre,
+      baseId: base.id,
     };
   }
   return { productos: resultado, sinPareja };
@@ -262,13 +275,23 @@ export async function sincronizarTrivo({ ahora = Date.now(), dias = 30 } = {}) {
   const carta = await catalogoPropio('aguapure');
   const { productos, sinPareja } = emparejarTrivo(carta, datos);
   const reales = Object.fromEntries(Object.entries(productos).filter(([, x]) => x.costo > 0).map(([id, x]) => [id, x.costo]));
+  const anterior = await leer('mitienda-trivo');
   const costos = await guardarCostos(reales);
-  const doc = { t: ahora, desde: datos.desde, hasta: datos.hasta, dias, productos, sinPareja, error: null };
+  // Compras: las que llegaron desde la última lectura y los costos que cambiaron.
+  // null = no hay compras; si no se pudieron leer, se queda la marca anterior.
+  const ultimaCompra = datos.compras === null ? anterior?.ultimaCompra : datos.compras.length ? Math.max(...datos.compras.map((c) => Number(c.id))) : null;
+  const cambios = anterior?.t ? cambiosPorCompra(carta, productos, anterior, datos.compras) : {};
+  const doc = { t: ahora, desde: datos.desde, hasta: datos.hasta, dias, productos, sinPareja, ultimaCompra, error: null };
   await actualizar('mitienda-trivo', () => doc);
-  return { ...doc, costos, conCosto: Object.keys(reales).length };
+  const nuevas = Object.keys(cambios).length ? await proponerPrecios({ carta, trivo: doc, cambios, ahora }) : [];
+  if (nuevas.length) {
+    const aviso = { tipo: 'precio-compra', title: `Compra en TRIVO: ${nuevas.length} ${nuevas.length === 1 ? 'precio' : 'precios'} para aprobar`, body: nuevas.slice(0, 3).map((x) => `${x.nombre}: ${x.precioActual} → ${x.precioNuevo}`).join(' · '), url: '/#mitienda', t: ahora };
+    await notificarAvisos([aviso], { ahora }).catch((e) => console.error('[push]', e.message));
+  }
+  return { ...doc, costos, conCosto: Object.keys(reales).length, propuestasNuevas: nuevas.length };
 }
 
-// Para el monitoreo: vuelve a leer TRIVO cada 6 horas.
+// Para el monitoreo: vuelve a leer TRIVO cada hora (así una compra cargada se nota pronto).
 export async function refrescarTrivo({ ahora = Date.now() } = {}) {
   if (!trivoActivo()) return false;
   const config = await leerConfig();
@@ -278,4 +301,152 @@ export async function refrescarTrivo({ ahora = Date.now() } = {}) {
   if (ahora - ultimo < VIGENCIA_TRIVO_HORAS * 60 * 60_000) return false;
   await sincronizarTrivo({ ahora });
   return true;
+}
+
+// ── Precios por compras: tu margen, con tu aprobación ───────────────────────
+// Cuando cargas una compra en TRIVO (o cambia un costo), se calcula el precio
+// con tu margen esperado (como TRIVO: costo ÷ (1 − margen %), redondeado hacia
+// arriba a la centena) y queda como propuesta. Nada cambia en TRIVO hasta que
+// tocas «Aplicar»; cada cambio aplicado queda en el historial y se puede deshacer.
+const MAX_HISTORIAL = 200;
+
+export async function leerMargenes() {
+  const doc = (await leer('mitienda-margen')) || {};
+  return { general: limpiarMargen(doc.general) ?? MARGEN_POR_DEFECTO, porProducto: doc.porProducto || {} };
+}
+
+export async function guardarMargenes({ general, porProducto } = {}) {
+  return actualizar('mitienda-margen', (actual) => {
+    const doc = { general: limpiarMargen(actual?.general) ?? MARGEN_POR_DEFECTO, porProducto: { ...(actual?.porProducto || {}) } };
+    if (general !== undefined) {
+      if (limpiarMargen(general) === null) throw new RangeError('El margen debe estar entre 0 y 89 %');
+      doc.general = limpiarMargen(general);
+    }
+    for (const [id, v] of Object.entries(porProducto || {})) {
+      if (!/^[\w-]{1,80}$/.test(id)) continue;
+      if (limpiarMargen(v) === null) delete doc.porProducto[id];
+      else doc.porProducto[id] = limpiarMargen(v);
+    }
+    return doc;
+  });
+}
+
+// Productos de la carta tocados por una compra o un cambio de costo. Un cambio
+// en la lata también toca sus paquetes (x 6, x 24, caja con hielo).
+export function cambiosPorCompra(carta, productos, anterior, compras) {
+  const cambios = {};
+  // Sin marca de la última compra (lectura de antes de la 2.4) todo es punto de
+  // partida; con «null» no había compras, así que cualquiera es nueva.
+  const desde = anterior.ultimaCompra;
+  const nuevas = desde === undefined ? [] : (compras || []).filter((c) => desde === null || Number(c.id) > Number(desde));
+  const tocados = new Set(nuevas.map((c) => String(c.producto)));
+  for (const p of carta) {
+    const x = productos[p.id];
+    if (!(x?.costo > 0)) continue;
+    const [idProducto, idVariante] = String(p.id).split('-');
+    const antes = anterior.productos?.[p.id]?.costo ?? null;
+    const compra = nuevas.find((c) => String(c.producto) === idProducto && (!c.variante || !idVariante || String(c.variante) === idVariante)) ||
+      (x.baseId ? nuevas.find((c) => String(c.producto) === String(x.baseId)) : null);
+    if (compra || tocados.has(idProducto) || (antes !== null && Math.round(antes) !== Math.round(x.costo))) {
+      cambios[p.id] = { costoAntes: antes, motivo: compra ? 'compra' : 'costo', compra: compra ? { fecha: compra.fecha, cantidad: compra.cantidad, costo: compra.costo } : null };
+    }
+  }
+  return cambios;
+}
+
+async function reglaCompartida() {
+  return limpiarRegla((await leerAjustesCompartidos())?.ajustes?.miTiendaRegla || {});
+}
+
+// Arma (o reemplaza) las propuestas de los productos indicados. Solo se propone
+// si el precio con tu margen es distinto del actual.
+export async function proponerPrecios({ carta, trivo, cambios, ahora = Date.now() }) {
+  const [margenes, regla, costos] = await Promise.all([leerMargenes(), reglaCompartida(), leerCostos()]);
+  const nuevas = [];
+  for (const p of carta) {
+    if (!cambios[p.id]) continue;
+    const t = trivo.productos?.[p.id];
+    const costo = t?.costo > 0 ? t.costo : costos[p.id];
+    const margen = margenes.porProducto[p.id] ?? margenes.general;
+    const lista = p.precioAntes ?? p.precio; // el precio en TRIVO, sin la promo
+    const descuento = p.precioAntes ? p.precioAntes - p.precio : 0;
+    const precioNuevo = precioConMargen(costo, margen, { fria: /fr[ií]a/i.test(p.variante || ''), recargoFria: regla.recargoFria, descuento });
+    if (!precioNuevo || precioNuevo === lista) continue;
+    const [producto, variante = null] = String(p.id).split('-');
+    nuevas.push({
+      id: p.id,
+      nombre: p.nombre,
+      producto,
+      variante,
+      costo,
+      costoAntes: cambios[p.id].costoAntes ?? null,
+      margen,
+      precioActual: lista,
+      precioNuevo,
+      descuento,
+      margenActual: margenSobrePrecio(lista - descuento, costo),
+      margenNuevo: margenSobrePrecio(precioNuevo - descuento, costo),
+      motivo: cambios[p.id].motivo,
+      compra: cambios[p.id].compra || null,
+      t: ahora,
+    });
+  }
+  if (nuevas.length) await actualizar('mitienda-propuestas', (actual) => ({ ...(actual || {}), ...Object.fromEntries(nuevas.map((x) => [x.id, x])) }));
+  return nuevas;
+}
+
+// «Calcular todos con mi margen»: propuestas para toda la carta con costo.
+export async function proponerTodos({ ahora = Date.now() } = {}) {
+  const config = await leerConfig();
+  if (config.miTienda !== 'aguapure') throw new TypeError('Los precios con margen se aplican en TRIVO: elige Agua Pure en Ajustes → Mi tienda');
+  const [carta, trivo] = await Promise.all([catalogoPropio('aguapure'), leer('mitienda-trivo')]);
+  const cambios = Object.fromEntries(carta.map((p) => [p.id, { costoAntes: null, motivo: 'margen' }]));
+  // Las que ya no hacen falta (el precio ya es el de tu margen) se quitan.
+  await actualizar('mitienda-propuestas', () => ({}));
+  return proponerPrecios({ carta, trivo: trivo || {}, cambios, ahora });
+}
+
+export async function leerPropuestas() {
+  return Object.values((await leer('mitienda-propuestas')) || {}).sort((a, b) => b.t - a.t);
+}
+
+export async function descartarPropuesta(id) {
+  await actualizar('mitienda-propuestas', (actual) => {
+    const doc = { ...(actual || {}) };
+    delete doc[String(id)];
+    return doc;
+  });
+  return leerPropuestas();
+}
+
+async function anotarHistorial(entrada) {
+  return actualizar('mitienda-historial-precios', (lista) => [entrada, ...(lista || [])].slice(0, MAX_HISTORIAL));
+}
+
+export async function leerHistorialPrecios() {
+  return (await leer('mitienda-historial-precios')) || [];
+}
+
+// Aplica en TRIVO una propuesta que tú aprobaste.
+export async function aplicarPropuesta(id, { ahora = Date.now() } = {}) {
+  const propuesta = ((await leer('mitienda-propuestas')) || {})[String(id)];
+  if (!propuesta) throw new TypeError('Esa propuesta ya no existe');
+  if (!(propuesta.precioNuevo - propuesta.descuento > propuesta.costo)) throw new TypeError('El precio quedaría por debajo del costo');
+  const r = await cambiarPrecio({ producto: propuesta.producto, variante: propuesta.variante, precio: propuesta.precioNuevo, esperado: propuesta.precioActual });
+  await descartarPropuesta(id);
+  await anotarHistorial({ id: `${ahora}-${propuesta.id}`, producto: propuesta.id, nombre: propuesta.nombre, antes: r.antes, despues: r.despues, costo: propuesta.costo, margen: propuesta.margen, motivo: propuesta.motivo, t: ahora });
+  return r;
+}
+
+// Vuelve al precio anterior de un cambio aplicado (también con tu aprobación).
+export async function deshacerCambio(idHistorial, { ahora = Date.now() } = {}) {
+  const lista = await leerHistorialPrecios();
+  const cambio = lista.find((h) => h.id === String(idHistorial));
+  if (!cambio) throw new TypeError('Ese cambio no está en el historial');
+  if (cambio.deshecho) throw new TypeError('Ese cambio ya se deshizo');
+  const [producto, variante = null] = String(cambio.producto).split('-');
+  const r = await cambiarPrecio({ producto, variante, precio: cambio.antes, esperado: cambio.despues });
+  await actualizar('mitienda-historial-precios', (l) => (l || []).map((h) => (h.id === cambio.id ? { ...h, deshecho: ahora } : h)));
+  await anotarHistorial({ id: `${ahora}-${cambio.producto}`, producto: cambio.producto, nombre: cambio.nombre, antes: r.antes, despues: r.despues, costo: cambio.costo, margen: null, motivo: 'deshacer', t: ahora });
+  return r;
 }

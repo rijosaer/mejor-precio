@@ -142,9 +142,26 @@
         <button id="mt-actualizar" class="boton-texto" type="button">Comparar</button>
         <button id="mt-exportar" class="boton-texto" type="button">Exportar CSV</button>
         <button id="mt-trivo" class="boton-texto" type="button" hidden>Leer TRIVO</button>
-        <button id="mt-aplicar" class="boton" type="button" disabled title="Todavía no está programado: se hará cuando lo apruebes">Aplicar en TRIVO</button>
       </div>
       <p id="mt-trivo-estado" class="nota nota-credenciales">Sin acceso a TRIVO POS: los costos se anotan a mano. Con TRIVO_USUARIO y TRIVO_CLAVE en el servidor salen solos tus costos reales, las existencias y las ventas.</p>
+      <fieldset id="mt-margen-caja" class="aj-seccion" hidden>
+        <legend>Precios por compras (TRIVO)</legend>
+        <div class="rejilla">
+          <label>Tu margen esperado (%)
+            <input id="mt-margenEsperado" type="number" inputmode="decimal" step="1" min="0" max="89">
+          </label>
+        </div>
+        <p class="ayuda">Como en TRIVO, el margen va sobre el precio de venta: precio = costo ÷ (1 − margen). Se redondea siempre hacia arriba a la centena (3.215 → 3.300). Las frías llevan tu recargo y las cajas con promo suman el descuento. Cuando cargas una compra en TRIVO aparece aquí la propuesta; nada cambia en TRIVO hasta que tocas «Aplicar».</p>
+        <div class="cat-acciones">
+          <button id="mt-proponer" class="boton-texto" type="button">Calcular todos con mi margen</button>
+          <button id="mt-aplicar-todos" class="boton" type="button" hidden>Aplicar todos</button>
+        </div>
+        <div id="mt-propuestas" class="mt-propuestas" aria-live="polite"></div>
+        <details id="mt-historial-caja" hidden>
+          <summary>Cambios aplicados en TRIVO</summary>
+          <div id="mt-historial"></div>
+        </details>
+      </fieldset>
       <div id="mt-estado" class="estado" aria-live="polite"></div>
       <div id="mt-items" class="cat-items"></div>
     </section>

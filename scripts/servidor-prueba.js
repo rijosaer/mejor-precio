@@ -30,7 +30,10 @@ const RUTAS_TRIVO = {
   '/api/inventory/resale-products/': [trivo.reventa],
   '/api/inventory/product-stock/': [trivo.stock],
   '/api/reports/sales-by-product/': [trivo.ventas],
+  '/api/inventory/movements/': [{ success: true, count: 0, results: [] }],
 };
+// «Aplicar en TRIVO» en la prueba local: un catálogo en memoria, nunca el real.
+const preciosPrueba = { 1: 3500, 2: 72000, 3: 85000, 4: 48000, '4-9': 49000 };
 const real = globalThis.fetch;
 globalThis.fetch = async (url, opciones) => {
   const u = new URL(String(url));
@@ -39,6 +42,16 @@ globalThis.fetch = async (url, opciones) => {
     const headers = new Headers({ 'content-type': 'application/json' });
     if (cookie) headers.append('set-cookie', cookie);
     return new Response(JSON.stringify(cuerpo), { status: 200, headers });
+  }
+  const prod = u.hostname === 'trivo-pos.com' && u.pathname.match(/^\/api\/catalog\/products\/(\d+)\/(?:variants\/(\d+)\/)?$/);
+  if (prod) {
+    if (opciones?.method === 'PATCH') {
+      const cuerpo = JSON.parse(opciones.body);
+      preciosPrueba[prod[2] ? `${prod[1]}-${prod[2]}` : prod[1]] = Number(cuerpo.price ?? cuerpo.base_price);
+      return new Response('{"success":true}', { status: 200 });
+    }
+    const variants = Object.entries(preciosPrueba).filter(([k]) => k.startsWith(`${prod[1]}-`)).map(([k, v]) => ({ id: Number(k.split('-')[1]), price: String(v) }));
+    return new Response(JSON.stringify({ success: true, data: { id: Number(prod[1]), base_price: String(preciosPrueba[prod[1]]), variants } }), { status: 200 });
   }
   if (u.hostname === 'trivo-pos.com' && !u.pathname.startsWith('/api/public/')) return new Response('{}', { status: 404 });
   const ruta = RUTAS.find(([re]) => re.test(String(url)));

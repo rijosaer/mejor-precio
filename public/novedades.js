@@ -9,6 +9,31 @@ import { $, boton, el, guardado } from './util.js';
 
 export const VERSIONES = [
   {
+    version: '2.4',
+    fecha: '2026-11-01',
+    titulo: 'Compras en TRIVO: tu precio con tu margen, con tu aprobación',
+    cambios: [
+      {
+        titulo: 'Precio por compra',
+        antes: 'Al cargar una compra en TRIVO había que calcular y cambiar el precio de venta a mano.',
+        ahora: 'Mejor Precio revisa TRIVO cada hora (o al tocar «Leer TRIVO»). Si entró una compra o cambió un costo, propone el precio con tu margen esperado y te avisa. Solo cambia en TRIVO cuando tocas «Aplicar».',
+        donde: 'mitienda',
+      },
+      {
+        titulo: 'Tu margen, como lo cuenta TRIVO',
+        antes: 'No había dónde poner el margen esperado.',
+        ahora: 'Pones un margen general y, si quieres, uno por producto. Se cuenta sobre el precio de venta, igual que TRIVO (precio = costo ÷ (1 − margen)), y se redondea siempre hacia arriba a la centena: 3.215 queda en 3.300. Una compra de latas también recalcula sus paquetes x 6, x 24 y la caja con hielo.',
+        donde: 'mitienda',
+      },
+      {
+        titulo: 'Historial y deshacer',
+        antes: 'No quedaba registro de los cambios de precio.',
+        ahora: 'Cada precio aplicado queda con el antes y el después, y con «Deshacer» vuelve al anterior. Si alguien cambió el precio en TRIVO mientras tanto, no se pisa.',
+        donde: 'mitienda',
+      },
+    ],
+  },
+  {
     version: '2.3',
     fecha: '2026-11-01',
     titulo: 'Mi tienda con tus datos de TRIVO: costos reales, existencias y ventas',

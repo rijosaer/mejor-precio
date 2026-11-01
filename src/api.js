@@ -6,7 +6,7 @@ import { catalogoTiendas, comparar, estadoTiendas } from './comparador.js';
 import { guardarAjustesCompartidos, guardarConfig, leerAjustesCompartidos, leerConfig } from './config.js';
 import { borrarMovimiento, leerMovimientos, registrarMovimiento } from './inventario.js';
 import { guardarLista, leerLista, novedades, registrarBusqueda, revisarSalud } from './monitor.js';
-import { analizarProducto, estadoMiTienda, guardarCostos, sincronizarTrivo } from './mitienda.js';
+import { analizarProducto, aplicarPropuesta, descartarPropuesta, deshacerCambio, estadoMiTienda, guardarCostos, guardarMargenes, proponerTodos, sincronizarTrivo } from './mitienda.js';
 import { borrarProveedor, guardarProveedor, leerProveedores } from './proveedores.js';
 import { clavePublica, desuscribir, enviar, pushActivo, suscribir, suscripciones } from './push.js';
 
@@ -261,6 +261,35 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
           if (error instanceof TypeError) throw error;
           console.error('[trivo]', error.message);
           return json(502, { error: `No se pudo leer TRIVO: ${error.message}` });
+        }
+        return json(200, await estadoMiTienda());
+      });
+    }
+
+    // Precios con tu margen: propuestas que solo se aplican en TRIVO con tu aprobación.
+    if (ruta === '/api/mi-tienda/margen' && metodo === 'PUT') {
+      return validar(async () => json(200, { margenes: await guardarMargenes(await leerJson(request, 40_000)) }));
+    }
+    if (ruta === '/api/mi-tienda/propuestas' && metodo === 'POST') {
+      return validar(async () => {
+        await proponerTodos();
+        return json(200, await estadoMiTienda());
+      });
+    }
+    if (ruta === '/api/mi-tienda/propuestas' && metodo === 'DELETE') {
+      await descartarPropuesta(String(url.searchParams.get('id') || ''));
+      return json(200, await estadoMiTienda());
+    }
+    for (const [camino, accion] of [['/api/mi-tienda/aplicar', aplicarPropuesta], ['/api/mi-tienda/deshacer', deshacerCambio]]) {
+      if (ruta !== camino || metodo !== 'POST') continue;
+      return validar(async () => {
+        const { id } = await leerJson(request);
+        try {
+          await accion(String(id || ''));
+        } catch (error) {
+          if (error instanceof TypeError) throw error;
+          console.error('[trivo precio]', error.message);
+          return json(502, { error: error.message });
         }
         return json(200, await estadoMiTienda());
       });

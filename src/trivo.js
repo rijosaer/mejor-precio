@@ -1,13 +1,16 @@
 // TRIVO POS con la sesión de la tienda (TRIVO_USUARIO / TRIVO_CLAVE): costos
-// de compra, existencias y ventas por producto. SOLO LECTURA: además del inicio
-// de sesión, este módulo únicamente hace GET. Aplicar precios en TRIVO
-// (PATCH /api/catalog/products/<id>/) no está programado a propósito.
+// de compra, existencias, ventas y compras por producto. Todo es lectura salvo
+// UNA escritura: cambiarPrecio(), que solo cambia el precio de venta de un
+// producto o variante y solo se llama cuando apruebas una propuesta en Mi tienda.
 //
 //   /api/auth/csrf/                  cookie csrftoken
 //   /api/auth/login/                 POST {username, password} con X-CSRFToken → cookies access_token y refresh_token
 //   /api/inventory/resale-products/  costo de compra (purchase_cost), precio, existencias; por variante
 //   /api/inventory/product-stock/    existencias por bodega y variante (paginado)
 //   /api/reports/sales-by-product/   unidades vendidas, ingresos y pedidos por producto (date_from / date_to)
+//   /api/inventory/movements/        compras cargadas (type=purchase): producto, variante, cantidad, costo unitario
+//   PATCH /api/catalog/products/<id>/                   {base_price}   (producto sin variantes)
+//   PATCH /api/catalog/products/<id>/variants/<vid>/    {price}        (variante)
 import { ZONA } from './config.js';
 
 const BASE = 'https://trivo-pos.com';
@@ -138,9 +141,60 @@ export async function ventasPorProducto({ dias = 30, ahora = Date.now() } = {}) 
   return { desde, hasta, dias, ventas };
 }
 
+// Compras cargadas (orden recibida o movimiento manual de compra), las más nuevas primero.
+export async function comprasRecientes() {
+  const datos = await leerRuta('/api/inventory/movements/?type=purchase&page_size=50');
+  return (datos?.results ?? datos?.data?.results ?? [])
+    .filter((m) => !m.type || m.type === 'purchase')
+    .map((m) => ({
+      id: m.id,
+      producto: m.product_id ?? null,
+      variante: m.variant_id ?? null,
+      cantidad: num(m.quantity),
+      costo: num(m.unit_cost),
+      fecha: m.created_at || null,
+    }))
+    .filter((m) => m.producto && m.id !== undefined)
+    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || Number(b.id) - Number(a.id));
+}
+
+// ── La única escritura ──────────────────────────────────────────────────────
+// Cambia el precio de venta y nada más. Antes comprueba que el precio en TRIVO
+// siga siendo `esperado` (si alguien lo cambió, no se pisa) y después lo vuelve
+// a leer para confirmar.
+const precioEnTrivo = (detalle, variante) => num(variante ? detalle.variants?.find((v) => String(v.id) === String(variante))?.price : detalle.base_price);
+
+export async function cambiarPrecio({ producto, variante = null, precio, esperado }) {
+  if (!/^\d{1,9}$/.test(String(producto)) || (variante !== null && !/^\d{1,9}$/.test(String(variante)))) throw new TypeError('Producto no válido');
+  if (!Number.isInteger(precio) || precio <= 0 || precio >= 1e8) throw new TypeError('Precio no válido');
+  const ruta = `/api/catalog/products/${producto}/`;
+  const actual = precioEnTrivo((await leerRuta(ruta))?.data ?? {}, variante);
+  if (actual === null) throw new Error('Ese producto ya no está en TRIVO');
+  if (esperado !== undefined && Math.round(actual) !== Math.round(esperado)) {
+    throw new Error(`El precio en TRIVO ya no es ${esperado} (ahora es ${Math.round(actual)}): vuelve a leer TRIVO`);
+  }
+  const destino = variante ? `${ruta}variants/${variante}/` : ruta;
+  const cuerpo = variante ? { price: String(precio) } : { base_price: String(precio) };
+  const res = await llamar(destino, sesion.cookies, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', 'x-csrftoken': sesion.cookies.get('csrftoken') || '', referer: `${BASE}/catalog/products/${producto}`, origin: BASE },
+    body: JSON.stringify(cuerpo),
+  });
+  if (!res.ok) throw new Error(`TRIVO no aceptó el precio: HTTP ${res.status}`);
+  const nuevo = precioEnTrivo((await leerRuta(ruta))?.data ?? {}, variante);
+  if (Math.round(nuevo) !== precio) throw new Error('TRIVO respondió bien pero el precio no cambió');
+  return { antes: Math.round(actual), despues: precio };
+}
+
 // Todo lo que Mi tienda necesita, en paralelo.
 export async function leerTrivo({ dias = 30, ahora = Date.now() } = {}) {
   if (!sesion || Date.now() - sesion.t > SESION_MIN * 60_000) await iniciarSesion();
-  const [productos, stock, ventas] = await Promise.all([productosReventa(), existencias(), ventasPorProducto({ dias, ahora })]);
-  return { t: ahora, productos, stock, ...ventas };
+  const [productos, stock, ventas, compras] = await Promise.all([
+    productosReventa(),
+    existencias(),
+    ventasPorProducto({ dias, ahora }),
+    // Si las compras no se pueden leer, lo demás sigue sirviendo.
+    comprasRecientes().catch((e) => (console.error('[trivo compras]', e.message), null)),
+  ]);
+  return { t: ahora, productos, stock, compras, ...ventas };
 }

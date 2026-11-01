@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resumenInventario, sugerirPrecio } from '../public/precios.js';
+import { centenaArriba, precioConMargen, resumenInventario, sugerirPrecio } from '../public/precios.js';
 
 const carpeta = await mkdtemp(join(tmpdir(), 'mp-trivo-'));
 process.env.DATOS_DIR = carpeta;
@@ -41,6 +41,14 @@ const VENTAS = { success: true, data: [
   { product_id: 4, name_snapshot: 'Aguardiente', quantity_sold: 2, total_revenue: 98000, orders_count: 2 },
 ] };
 
+// Compras cargadas y precios en el catálogo de TRIVO (cambian durante los tests).
+const COMPRAS = [];
+const PRECIOS = { 1: 3500, 2: 72000, 3: 85000, 4: 48000, '4-9': 49000 };
+const detalle = (id) => ({
+  id: Number(id),
+  base_price: `${PRECIOS[id]}.00`,
+  variants: Object.entries(PRECIOS).filter(([k]) => k.startsWith(`${id}-`)).map(([k, v]) => ({ id: Number(k.split('-')[1]), price: `${v}.00` })),
+});
 const llamadas = [];
 let claveValida = true;
 const respuesta = (cuerpo, { estado = 200, cookies = [] } = {}) => {
@@ -63,11 +71,23 @@ globalThis.fetch = async (url, opciones = {}) => {
   if (u.pathname === '/api/inventory/resale-products/') return respuesta(REVENTA);
   if (u.pathname === '/api/inventory/product-stock/') return respuesta(STOCK[u.searchParams.get('page') || '1']);
   if (u.pathname === '/api/reports/sales-by-product/') return respuesta(VENTAS);
+  if (u.pathname === '/api/inventory/movements/') return respuesta({ success: true, count: COMPRAS.length, results: COMPRAS });
+  const prod = u.pathname.match(/^\/api\/catalog\/products\/(\d+)\/(?:variants\/(\d+)\/)?$/);
+  if (prod) {
+    const clave = prod[2] ? `${prod[1]}-${prod[2]}` : prod[1];
+    if (metodo === 'PATCH') {
+      if (opciones.headers['x-csrftoken'] !== 'tok123') return respuesta({}, { estado: 403 });
+      const cuerpo = JSON.parse(opciones.body);
+      PRECIOS[clave] = Number(prod[2] ? cuerpo.price : cuerpo.base_price);
+      return respuesta({ success: true });
+    }
+    return respuesta({ success: true, data: detalle(prod[1]) });
+  }
   return respuesta({ detail: 'no encontrado' }, { estado: 404 });
 };
 
 const trivo = await import('../src/trivo.js');
-const { emparejarTrivo, catalogoPropio, sincronizarTrivo, estadoMiTienda, refrescarTrivo, guardarCostos } = await import('../src/mitienda.js');
+const { emparejarTrivo, catalogoPropio, sincronizarTrivo, estadoMiTienda, refrescarTrivo, guardarCostos, aplicarPropuesta, deshacerCambio, guardarMargenes, proponerTodos } = await import('../src/mitienda.js');
 
 test('inicia sesión con CSRF, usuario y clave, y después solo hace GET', async () => {
   trivo.cerrarSesionLocal();
@@ -90,11 +110,12 @@ test('inicia sesión con CSRF, usuario y clave, y después solo hace GET', async
   assert.deepEqual(datos.ventas.get('1'), { unidades: 30, ingresos: 105000, pedidos: 10 });
 });
 
-test('el módulo de TRIVO no tiene forma de escribir', async () => {
+test('en TRIVO solo se escribe el precio de venta: un POST (sesión) y un PATCH', async () => {
   const fuente = await readFile(new URL('../src/trivo.js', import.meta.url), 'utf8');
   const metodos = [...fuente.matchAll(/method:\s*'([A-Z]+)'/g)].map((m) => m[1]);
-  assert.deepEqual(metodos, ['POST'], 'el único POST es el del inicio de sesión');
-  assert.doesNotMatch(fuente, /PATCH'|PUT'|DELETE'/);
+  assert.deepEqual(metodos.sort(), ['PATCH', 'POST'], 'POST del inicio de sesión y PATCH del precio');
+  assert.doesNotMatch(fuente, /PUT'|DELETE'/);
+  assert.match(fuente, /\{ price: String\(precio\) \} : \{ base_price: String\(precio\) \}/, 'el PATCH solo lleva el precio');
 });
 
 test('usuario o clave equivocados dan un error claro', async () => {
@@ -164,4 +185,70 @@ test('existencias y ventas en frases para la vista', () => {
   const c = resumenInventario({ fuente: 'calculado', existencias: 20, alcanza: 0, ventas: { unidades: 0, pedidos: 0 } });
   assert.deepEqual([c.existencias, c.agotado, c.ventas, c.cobertura], ['20 latas en TRIVO · alcanzan para 0', true, 'Sin ventas en 30 días', null]);
   assert.equal(resumenInventario(null), null);
+});
+
+test('precio con tu margen como TRIVO, redondeado hacia arriba a la centena', () => {
+  assert.deepEqual([3215, 3225, 3201, 3200, 3299.999].map(centenaArriba), [3300, 3300, 3300, 3200, 3300]);
+  // TRIVO: precio = costo ÷ (1 − margen). 2.572 con 20 % → 3.215 → 3.300.
+  assert.equal(precioConMargen(2572, 20), 3300);
+  assert.equal(precioConMargen(2560, 20), 3200, '2.560 ÷ 0,8 = 3.200 exacto: no sube');
+  assert.equal(precioConMargen(2572, 20, { fria: true, recargoFria: 10 }), 3600, 'la fría lleva su recargo');
+  assert.equal(precioConMargen(61728, 20, { descuento: 3000 }), 80200, 'la promo de valor fijo se suma');
+  assert.equal(precioConMargen(0, 20), null);
+  assert.equal(precioConMargen(2572, 95), null, 'margen imposible');
+});
+
+test('una compra en TRIVO deja propuestas con tu margen; nada se aplica sin aprobar', async () => {
+  trivo.cerrarSesionLocal();
+  await sincronizarTrivo({ ahora: Date.now() }); // punto de partida: sin compras
+  llamadas.length = 0;
+  // Cargas una compra de latas a 2.572 y TRIVO actualiza el costo.
+  COMPRAS.push({ id: 7, type: 'purchase', product_id: 1, variant_id: null, quantity: '48.0000', unit_cost: '2572.00', created_at: '2026-11-01T10:00:00-05:00' });
+  REVENTA.data.results[0].purchase_cost = '2572.00';
+  const r = await sincronizarTrivo({ ahora: Date.now() });
+  assert.equal(r.propuestasNuevas, 3, 'la lata, la x 24 y la caja con hielo');
+  assert.ok(!llamadas.some((l) => l.metodo === 'PATCH'), 'sin tu aprobación no se cambia nada');
+  const estado = await estadoMiTienda();
+  const porId = Object.fromEntries(estado.propuestas.map((x) => [x.id, x]));
+  assert.deepEqual([porId['1'].precioActual, porId['1'].precioNuevo, porId['1'].motivo, porId['1'].compra.costo], [3500, 3300, 'compra', 2572]);
+  assert.equal(porId['2'].precioNuevo, 80200, '24 × 2.572 ÷ 0,8 + 3.000 de la promo, hacia arriba');
+  assert.equal(porId['3'].precioNuevo, 79100, '(24 × 2.572 + 1.500 del hielo) ÷ 0,8');
+  assert.ok(Math.abs(porId['2'].margenNuevo - 20) < 0.5, 'lo que paga el cliente deja tu margen');
+  // Una segunda lectura sin compras nuevas no repite el aviso.
+  assert.equal((await sincronizarTrivo({ ahora: Date.now() })).propuestasNuevas, 0);
+});
+
+test('aplicar cambia solo ese precio en TRIVO, queda en el historial y se puede deshacer', async () => {
+  llamadas.length = 0;
+  await aplicarPropuesta('1');
+  const patch = llamadas.filter((l) => l.metodo === 'PATCH');
+  assert.equal(patch.length, 1);
+  assert.equal(patch[0].ruta, '/api/catalog/products/1/');
+  assert.deepEqual(JSON.parse(patch[0].body), { base_price: '3300' });
+  assert.equal(PRECIOS[1], 3300);
+  let estado = await estadoMiTienda();
+  assert.ok(!estado.propuestas.some((x) => x.id === '1'), 'la propuesta aplicada sale de la lista');
+  assert.deepEqual([estado.historial[0].antes, estado.historial[0].despues], [3500, 3300]);
+  await deshacerCambio(estado.historial[0].id);
+  assert.equal(PRECIOS[1], 3500);
+  estado = await estadoMiTienda();
+  assert.ok(estado.historial[1].deshecho);
+  await assert.rejects(deshacerCambio(estado.historial[1].id), /ya se deshizo/);
+});
+
+test('si el precio cambió en TRIVO no se pisa; las variantes van por su ruta', async () => {
+  PRECIOS[2] = 75000; // alguien lo cambió en el panel de TRIVO
+  await assert.rejects(aplicarPropuesta('2'), /ya no es 72000/);
+  assert.equal(PRECIOS[2], 75000);
+  // Margen propio para el aguardiente: 30 % sobre 31.000 → 44.285,7 → 44.300.
+  await guardarMargenes({ porProducto: { '4-9': 30 } });
+  await proponerTodos();
+  const p = (await estadoMiTienda()).propuestas.find((x) => x.id === '4-9');
+  assert.deepEqual([p.margen, p.precioNuevo], [30, 44300]);
+  llamadas.length = 0;
+  await aplicarPropuesta('4-9');
+  const patch = llamadas.find((l) => l.metodo === 'PATCH');
+  assert.equal(patch.ruta, '/api/catalog/products/4/variants/9/');
+  assert.deepEqual(JSON.parse(patch.body), { price: '44300' });
+  await assert.rejects(guardarMargenes({ general: 95 }), /entre 0 y 89/);
 });

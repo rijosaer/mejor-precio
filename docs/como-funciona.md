@@ -323,6 +323,15 @@ Emparejamiento con la carta (los id de la carta son los de TRIVO, `producto` o `
 - **directo:** el producto o su variante está en «Compra y reventa»: su costo y sus existencias.
 - **calculado:** los paquetes (x 6, x 24) y las cajas «+ Hielo» son combos sin costo propio. Se busca la lata suelta (`und`) del mismo tamaño cuya marca contiene a la otra («Club Colombia» ↔ «Club Colombia Dorada»; si hay dos, gana el nombre exacto): costo = unidades × costo de la lata (la variante «Caliente» si tiene) + el hielo de 3 kg en las cajas. Las existencias son las latas y para cuántos paquetes alcanzan.
 
-`POST /api/mi-tienda/trivo` (botón «Leer TRIVO», y el monitoreo cada 6 horas) guarda esos costos en `mitienda-costos` (reemplazan los anotados a mano de esos productos; los demás se quedan) y existencias y ventas en `mitienda-trivo`. Así el precio sugerido usa el costo real y no baja del margen mínimo.
+`POST /api/mi-tienda/trivo` (botón «Leer TRIVO», y el monitoreo cada hora) guarda esos costos en `mitienda-costos` (reemplazan los anotados a mano de esos productos; los demás se quedan) y existencias y ventas en `mitienda-trivo`. Así el precio sugerido usa el costo real y no baja del margen mínimo.
 
-**Aplicar precios en TRIVO no está programado** (`PATCH /api/catalog/products/<id>/`): el botón sigue apagado hasta que se apruebe.
+### Precios por compras: tu margen, con tu aprobación
+
+**Archivos:** `cambiarPrecio` y `comprasRecientes` en `src/trivo.js`; `cambiosPorCompra`, `proponerPrecios`, `aplicarPropuesta`, `deshacerCambio` en `src/mitienda.js`; `precioConMargen` en `public/precios.js`.
+
+1. **Detección.** TRIVO no tiene webhooks, así que el monitoreo lee TRIVO cada hora (y el botón «Leer TRIVO» al momento). Una compra es un movimiento `type=purchase` de `/api/inventory/movements/` (lo crean tanto la orden de compra recibida como la compra manual) con id mayor que `ultimaCompra`; también cuenta un `purchase_cost` distinto del de la lectura anterior. Una compra de la lata toca también sus paquetes (x 6, x 24, caja con hielo).
+2. **Precio.** Como en la ficha de TRIVO: margen sobre el precio de venta, `precio = costo ÷ (1 − margen %)`. Las «Fría» llevan el recargo de las frías de la regla; si el producto tiene una promo de valor fijo, se suma para que lo que paga el cliente deje el margen. Redondeo **siempre hacia arriba a la centena** (3.215 → 3.300; 3.200 se queda). El margen es el general (20 % por defecto) o el del producto (`mitienda-margen`). Se aplica tu margen aunque el mercado esté más barato.
+3. **Aprobación.** Las propuestas quedan en `mitienda-propuestas` y llega un aviso push. Nada cambia en TRIVO hasta tocar «Aplicar» (o «Aplicar todos», con confirmación; un cambio de 30 % o más pide confirmar).
+4. **Aplicar.** `cambiarPrecio` lee el producto, comprueba que el precio en TRIVO siga siendo el de la propuesta (si alguien lo cambió, no lo pisa), manda `PATCH /api/catalog/products/<id>/` con `{base_price}` o `PATCH …/variants/<vid>/` con `{price}` y vuelve a leer para confirmar. Es la única escritura en TRIVO. Queda en `mitienda-historial-precios` con el antes y el después, y «Deshacer» vuelve al anterior con la misma comprobación.
+
+Rutas: `PUT /api/mi-tienda/margen`, `POST /api/mi-tienda/propuestas` (calcular todos), `DELETE /api/mi-tienda/propuestas?id=`, `POST /api/mi-tienda/aplicar`, `POST /api/mi-tienda/deshacer`.

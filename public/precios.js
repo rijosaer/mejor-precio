@@ -92,3 +92,29 @@ export function resumenInventario(t, dias = 30) {
   }
   return r;
 }
+
+// ── Precio con tu margen (como lo calcula TRIVO) ────────────────────────────
+// TRIVO cuenta el margen sobre el precio de venta: precio = costo ÷ (1 − margen %)
+// (y margen = (precio − costo) ÷ precio). Aquí además:
+//   - las «Fría» llevan el recargo de las frías de tu regla;
+//   - si el producto tiene una promo de valor fijo (Envío gratis −8.000), se
+//     suma para que lo que paga el cliente siga dejando tu margen;
+//   - se redondea SIEMPRE hacia arriba a la centena: 3.215 → 3.300, 3.200 → 3.200.
+export const MARGEN_POR_DEFECTO = 20;
+
+export const centenaArriba = (v) => Math.ceil(Math.round(v * 100) / 100 / 100) * 100;
+
+export function limpiarMargen(v) {
+  const n = Number(v);
+  return v === '' || v === null || v === undefined || !Number.isFinite(n) || n < 0 || n >= 90 ? null : n;
+}
+
+export function precioConMargen(costo, margen, { fria = false, recargoFria = 0, descuento = 0 } = {}) {
+  const m = limpiarMargen(margen);
+  if (!(costo > 0) || m === null) return null;
+  const base = (costo / (1 - m / 100)) * (fria ? 1 + recargoFria / 100 : 1);
+  return centenaArriba(base + (descuento > 0 ? descuento : 0));
+}
+
+// Margen real (sobre el precio que paga el cliente), como lo muestra TRIVO.
+export const margenSobrePrecio = (precio, costo) => (precio > 0 && costo > 0 ? ((precio - costo) / precio) * 100 : null);

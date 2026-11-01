@@ -1439,3 +1439,12 @@ textarea:focus { border-color: var(--tinta); outline: none; }
 @media (max-width: 560px) {
   .grupo-mio { grid-column: 1 / -1; }
 }
+
+/* Precios por compras (TRIVO) */
+.mt-propuestas { margin-top: 10px; }
+.mt-propuesta { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--linea); }
+.mt-propuesta .ayuda { margin: 0; }
+.mt-propuesta .aj-botones { grid-column: 1 / -1; margin: 0; }
+.mt-propuesta-precio { text-align: right; white-space: nowrap; }
+.mt-cambio { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--linea); }
+#mt-historial-caja { margin-top: 10px; }
