@@ -1406,3 +1406,46 @@ textarea:focus { border-color: var(--tinta); outline: none; }
 @media (max-width: 560px) {
   .novedad-comparar { grid-template-columns: 1fr; }
 }
+
+/* ── Listas predeterminadas y búsquedas rápidas ─────────────────────────── */
+.sugeridas-bloque { margin: 22px 0 18px; }
+.sugeridas-bloque h3 { margin: 0 0 4px; font-size: 16px; letter-spacing: -0.01em; }
+.sugerida { margin-top: 10px; padding: 12px 14px; background: var(--superficie); border: 1px solid var(--linea); border-radius: 12px; }
+.sugerida summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; cursor: pointer; }
+.sugerida summary .ayuda { margin: 0; }
+.sugerida[open] summary { margin-bottom: 4px; }
+.sugerida-opciones { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px 12px; margin: 8px 0 4px; }
+.sugerida-opciones .opciones { margin: 0; font-size: 14px; }
+.rapidas { align-items: center; margin-top: 6px; }
+.rapidas-titulo { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tinta-suave); margin-right: 2px; }
+
+/* ── Mi tienda ──────────────────────────────────────────────────────────── */
+#vista-mitienda h2 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.02em; }
+.mt-filtro { font: inherit; text-align: left; cursor: pointer; border: 1px solid var(--linea); }
+.mt-filtro.activo { border-color: var(--tinta); box-shadow: inset 0 0 0 1px var(--tinta); }
+.mt-item { padding: 14px 16px; background: var(--superficie); border: 1px solid var(--linea); border-left-width: 4px; border-radius: 12px; }
+.mt-item + .mt-item { margin-top: 10px; }
+.mt-caro, .mt-perdida { border-left-color: var(--perdida); }
+.mt-barato { border-left-color: var(--ahorro); }
+.mt-en-mercado { border-left-color: var(--linea-fuerte); }
+.mt-cabeza { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.mt-ref { margin: 6px 0 0; }
+.mt-item .fila-hist { margin-top: 8px; }
+.mt-item .panel-salida { margin-top: 10px; }
+.mt-item .aj-botones { margin-top: 10px; }
+.nota-credenciales { margin: 8px 2px 12px; }
+.grupo-mio { grid-column: 2 / -1; margin: 8px 0 0; font-size: 13.5px; color: var(--tinta-media); }
+.grupo-mio b { color: var(--tinta); }
+@media (max-width: 560px) {
+  .grupo-mio { grid-column: 1 / -1; }
+}
+
+/* Precios por compras (TRIVO) */
+.mt-propuestas { margin-top: 10px; }
+.mt-propuesta { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--linea); }
+.mt-propuesta .ayuda { margin: 0; }
+.mt-propuesta .aj-botones { grid-column: 1 / -1; margin: 0; }
+.mt-propuesta-precio { text-align: right; white-space: nowrap; }
+.mt-cambio { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--linea); }
+#mt-historial-caja { margin-top: 10px; }
+.aj-subtitulo { margin: 16px 0 4px; font-size: 0.95rem; }

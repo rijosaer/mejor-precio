@@ -6,8 +6,10 @@ import { catalogoTiendas, comparar, estadoTiendas } from './comparador.js';
 import { guardarAjustesCompartidos, guardarConfig, leerAjustesCompartidos, leerConfig } from './config.js';
 import { borrarMovimiento, leerMovimientos, registrarMovimiento } from './inventario.js';
 import { guardarLista, leerLista, novedades, registrarBusqueda, revisarSalud } from './monitor.js';
+import { analizarProducto, aplicarPropuesta, descartarPropuesta, deshacerCambio, estadoMiTienda, guardarCostos, guardarMargenes, proponerTodos, sincronizarTrivo } from './mitienda.js';
 import { borrarProveedor, guardarProveedor, leerProveedores } from './proveedores.js';
-import { clavePublica, desuscribir, enviar, pushActivo, suscribir, suscripciones } from './push.js';
+import { clavePublica, desuscribir, enviar, mensajeWhatsapp, pushActivo, suscribir, suscripciones } from './push.js';
+import { enviarWhatsapp, guardarWhatsapp, leerWhatsapp } from './whatsapp.js';
 
 const DIAS_SESION = 30;
 const MAX_INTENTOS = 10;
@@ -175,7 +177,8 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
     if (ruta === '/api/buscar') {
       const q = (url.searchParams.get('q') || '').trim();
       if (q.length < 2 || q.length > 80) return json(400, { error: 'Escribe entre 2 y 80 caracteres' });
-      const datos = await comparar(q, { tiendas: listaDeIds(url.searchParams.get('tiendas')) });
+      const { miTienda } = await leerConfig();
+      const datos = await comparar(q, { tiendas: listaDeIds(url.searchParams.get('tiendas')), miTienda });
       // La búsqueda queda en el historial del servidor (y, si es de la lista, alimenta el monitoreo).
       datos.series = await registrarBusqueda(q, datos).catch((error) => (console.error('[historial]', error.message), {}));
       return json(200, datos);
@@ -232,6 +235,24 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
       return json(200, r);
     }
 
+    // WhatsApp del dueño: los mismos avisos que el push.
+    if (ruta === '/api/whatsapp' && metodo === 'GET') return json(200, await leerWhatsapp());
+    if (ruta === '/api/whatsapp' && metodo === 'PUT') {
+      return validar(async () => json(200, await guardarWhatsapp(await leerJson(request))));
+    }
+    if (ruta === '/api/whatsapp/probar' && metodo === 'POST') {
+      const wa = await leerWhatsapp();
+      if (!wa.servidor) return json(503, { error: 'Faltan WHATSAPP_TOKEN y WHATSAPP_PHONE_ID en el servidor' });
+      if (!wa.numero) return json(400, { error: 'Escribe primero el número del dueño' });
+      try {
+        const texto = mensajeWhatsapp([{ tipo: 'prueba', title: 'Así llegan los avisos', body: 'Precios, compras por aprobar, existencias bajas, productos bajo el costo y tiendas caídas.', url: '/' }]);
+        return json(200, await enviarWhatsapp(texto, { numero: wa.numero }));
+      } catch (error) {
+        console.error('[whatsapp]', error.message);
+        return json(502, { error: `WhatsApp: ${error.message}` });
+      }
+    }
+
     // Inventario y ventas.
     if (ruta === '/api/movimientos' && metodo === 'GET') return json(200, { movimientos: await leerMovimientos() });
     if (ruta === '/api/movimientos' && metodo === 'POST') {
@@ -239,6 +260,58 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
     }
     if (ruta === '/api/movimientos' && metodo === 'DELETE') {
       return json(200, { movimientos: await borrarMovimiento(String(url.searchParams.get('id') || '')) });
+    }
+
+    // Mi tienda: la carta propia frente al mercado.
+    if (ruta === '/api/mi-tienda' && metodo === 'GET') return json(200, await estadoMiTienda());
+    if (ruta === '/api/mi-tienda/comparar' && metodo === 'POST') {
+      return validar(async () => json(200, { resultado: await analizarProducto(String((await leerJson(request)).id || '')) }));
+    }
+    if (ruta === '/api/mi-tienda/costos' && metodo === 'PUT') {
+      return validar(async () => json(200, { costos: await guardarCostos((await leerJson(request, 40_000)).costos) }));
+    }
+
+    // TRIVO (solo lectura): costos reales, existencias y ventas de 30 días.
+    if (ruta === '/api/mi-tienda/trivo' && metodo === 'POST') {
+      return validar(async () => {
+        try {
+          await sincronizarTrivo();
+        } catch (error) {
+          if (error instanceof TypeError) throw error;
+          console.error('[trivo]', error.message);
+          return json(502, { error: `No se pudo leer TRIVO: ${error.message}` });
+        }
+        return json(200, await estadoMiTienda());
+      });
+    }
+
+    // Precios con tu margen: propuestas que solo se aplican en TRIVO con tu aprobación.
+    if (ruta === '/api/mi-tienda/margen' && metodo === 'PUT') {
+      return validar(async () => json(200, { margenes: await guardarMargenes(await leerJson(request, 40_000)) }));
+    }
+    if (ruta === '/api/mi-tienda/propuestas' && metodo === 'POST') {
+      return validar(async () => {
+        await proponerTodos();
+        return json(200, await estadoMiTienda());
+      });
+    }
+    if (ruta === '/api/mi-tienda/propuestas' && metodo === 'DELETE') {
+      await descartarPropuesta(String(url.searchParams.get('id') || ''));
+      return json(200, await estadoMiTienda());
+    }
+    for (const [camino, accion] of [['/api/mi-tienda/aplicar', aplicarPropuesta], ['/api/mi-tienda/deshacer', deshacerCambio]]) {
+      if (ruta !== camino || metodo !== 'POST') continue;
+      return validar(async () => {
+        const { id } = await leerJson(request);
+        try {
+          await accion(String(id || ''));
+        } catch (error) {
+          if (error instanceof TypeError) throw error;
+          console.error('[trivo precio]', error.message);
+          return json(502, { error: error.message });
+        }
+        return json(200, await estadoMiTienda());
+      });
     }
 
     // Proveedores propios (sin página web).

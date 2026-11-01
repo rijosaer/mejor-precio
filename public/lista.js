@@ -1,6 +1,7 @@
 // Mi lista: los productos que se monitorean solos, la propuesta del día (en qué
 // tienda sale más barato cada uno) y el resumen de la semana.
 import { cambioSemanal, claveDe, registrar } from './datos.js';
+import { faltantes, LISTAS, yaEsta } from './listas-sugeridas.js';
 import { agrupar } from './resultados.js';
 import { listaGuardar, listaLeer, tiendasActivas } from './sync.js';
 import { $, acciones, api, boton, compartir, el, enlace, fechaLarga, guardado, hace, idNuevo, pesos, presentacion } from './util.js';
@@ -43,6 +44,7 @@ export function pintarLista() {
     const quitar = boton('Quitar', 'mini', () => {
       listaGuardar(listaLeer().filter((x) => x.id !== item.id));
       pintarLista();
+      pintarSugeridas();
     });
     const acc = el('div', 'lista-acciones');
     acc.append(umbral, quitar);
@@ -68,7 +70,7 @@ export async function analizarLista() {
       const grupos = agrupar(datos, { soloDisponibles: true, modo: 'precio' });
       // La presentación del tamaño que se escribió ("…750"); si no hay, la más comparada.
       const tamanos = item.q.match(/\d+/g) || [];
-      const g = grupos.find((x) => x.clave !== 'sin' && tamanos.includes(String(x.ml))) || grupos.find((x) => x.clave !== 'sin');
+      const g = grupos.find((x) => x.ml && !x.variante && tamanos.includes(String(x.ml))) || grupos.find((x) => x.ml && !x.variante);
       if (g?.mejores?.length) {
         const [primero, segundo] = g.mejores;
         filas.push({
@@ -168,8 +170,63 @@ export function configurarLista() {
   $('#lista-analizar').addEventListener('click', analizarLista);
 }
 
+// ── Listas predeterminadas ─────────────────────────────────────────────────
+const MAX_ITEMS = 60;
+
+export function pintarSugeridas() {
+  const caja = $('#listas-sugeridas');
+  caja.replaceChildren();
+  const actuales = listaLeer();
+  for (const lista of LISTAS) {
+    const pendientes = faltantes(lista, actuales);
+    const tarjeta = el('details', 'sugerida');
+    const resumen = el('summary', '');
+    resumen.append(el('b', '', lista.nombre), el('span', 'ayuda', pendientes.length ? `${lista.productos.length} productos · ${pendientes.length} por agregar` : 'Ya están todos en tu lista'));
+    tarjeta.append(resumen, el('p', 'ayuda', lista.descripcion));
+    const opciones = el('div', 'sugerida-opciones');
+    for (const p of lista.productos) {
+      const l = el('label', 'opciones');
+      const c = el('input');
+      c.type = 'checkbox';
+      c.value = p.q;
+      const esta = yaEsta(p.q, actuales);
+      c.checked = !esta;
+      c.disabled = esta;
+      l.append(c, document.createTextNode(` ${p.corto}${esta ? ' (ya está)' : ''}`));
+      l.title = p.q;
+      opciones.append(l);
+    }
+    const mensaje = el('p', 'ayuda');
+    const agregar = boton(`Agregar a Mi lista`, 'boton', () => {
+      const elegidas = [...opciones.querySelectorAll('input:checked:not(:disabled)')].map((c) => c.value);
+      const items = listaLeer();
+      const espacio = MAX_ITEMS - items.length;
+      if (!elegidas.length) return;
+      if (espacio <= 0) {
+        mensaje.textContent = `Mi lista ya tiene ${MAX_ITEMS} productos, el máximo.`;
+        return;
+      }
+      const nuevas = elegidas.filter((q) => !yaEsta(q, items)).slice(0, espacio);
+      listaGuardar([...items, ...nuevas.map((q) => ({ q, id: idNuevo() }))]);
+      pintarLista();
+      pintarSugeridas();
+      $('#lista-estado').replaceChildren(
+        el('p', '', `${nuevas.length} ${nuevas.length === 1 ? 'producto agregado' : 'productos agregados'}${nuevas.length < elegidas.length ? ` (no cabían ${elegidas.length - nuevas.length})` : ''}. El servidor los revisará en la próxima hora; pulsa «Analizar ahora» para ver los precios ya.`),
+      );
+    });
+    agregar.disabled = !pendientes.length;
+    const todos = boton('Marcar todos', 'boton-texto', () => opciones.querySelectorAll('input:not(:disabled)').forEach((c) => (c.checked = true)));
+    const ninguno = boton('Ninguno', 'boton-texto', () => opciones.querySelectorAll('input:not(:disabled)').forEach((c) => (c.checked = false)));
+    const acciones = el('div', 'aj-botones');
+    acciones.append(agregar, todos, ninguno);
+    tarjeta.append(opciones, acciones, mensaje);
+    caja.append(tarjeta);
+  }
+}
+
 export function abrirLista() {
   pintarLista();
+  pintarSugeridas();
   pintarPropuesta();
 }
 

@@ -3,6 +3,7 @@
 // VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY (se crean con `npm run claves-push`).
 import { actualizar, leer } from './almacen.js';
 import { enSilencio, leerConfig } from './config.js';
+import { enviarWhatsapp, leerWhatsapp, whatsappActivo } from './whatsapp.js';
 
 const MAX_SUSCRIPCIONES = 10;
 const MAX_PENDIENTES = 40;
@@ -104,35 +105,65 @@ export function textoAviso(a) {
       return { title: `${a.tienda} no está respondiendo`, body: a.detalle || 'Revisa Estado de las tiendas.' };
     case 'semanal':
       return { title: 'Resumen de la semana', body: a.detalle };
+    case 'bajo-minimo':
+      return { title: `Hay que pedir: ${a.nombre}`, body: `Quedan ${a.existencias} en TRIVO (mínimo ${a.minimo}).` };
+    case 'bajo-costo':
+      return { title: `Bajo tu costo: ${a.nombre}`, body: `Lo vendes a ${pesos.format(a.precio)} y te cuesta ${pesos.format(a.costo)}.` };
     default:
+      // Avisos que ya traen su texto (precios por compra, TRIVO, recordatorios).
+      if (a.title) return { title: a.title, body: a.body || '' };
       return { title: a.nombre || 'Mejor Precio', body: `${a.tienda || ''} ${precio}`.trim() };
   }
 }
 
-// Avisos → notificaciones. Con más de 3 a la vez se manda una sola que los
-// resume. En horario de silencio se guardan y salen en la próxima revisión.
+// Enlace a la app en el mensaje de WhatsApp (Netlify define URL; si no, APP_URL).
+function enlace(ruta = '/') {
+  const base = process.env.APP_URL || process.env.URL || '';
+  return base ? `${base.replace(/\/$/, '')}${ruta}` : '';
+}
+
+// Un solo mensaje de WhatsApp con todos los avisos pendientes.
+export function mensajeWhatsapp(avisos) {
+  const lineas = avisos.slice(0, 25).map((a) => {
+    const t = textoAviso(a);
+    return `• *${t.title}*${t.body ? `\n  ${t.body}` : ''}`;
+  });
+  if (avisos.length > 25) lineas.push(`… y ${avisos.length - 25} más en la app.`);
+  const ruta = avisos.some((a) => a.url) && avisos.every((a) => a.url === avisos[0].url) ? avisos[0].url : '/';
+  const link = enlace(ruta);
+  return [`*Mejor Precio* · ${avisos.length === 1 ? '1 aviso' : `${avisos.length} avisos`}`, ...lineas, link ? `\nAbrir: ${link}` : ''].filter(Boolean).join('\n');
+}
+
+// Avisos → notificaciones push y WhatsApp. Con más de 3 a la vez el push manda
+// una sola que los resume; WhatsApp siempre manda un solo mensaje con todos.
+// En horario de silencio se guardan y salen en la próxima revisión.
 export async function notificarAvisos(avisos, { ahora = Date.now() } = {}) {
-  if (!pushActivo()) return { enviadas: 0, motivo: 'sin-claves' };
+  const wa = whatsappActivo() ? await leerWhatsapp() : null;
+  const conWhatsapp = Boolean(wa?.activo && wa.numero);
+  if (!pushActivo() && !conWhatsapp) return { enviadas: 0, motivo: 'sin-claves' };
   const config = await leerConfig();
   const nuevos = avisos.map((a) => ({ ...a }));
   const pendientes = await actualizar('push-pendientes', (lista) => [...(lista || []), ...nuevos].slice(-MAX_PENDIENTES));
   if (!pendientes.length || enSilencio(config.silencio, ahora)) return { enviadas: 0, motivo: pendientes.length ? 'silencio' : 'nada' };
   await actualizar('push-pendientes', () => []);
-  let notificacion;
+  const resultado = { enviadas: 0 };
+  if (conWhatsapp) {
+    resultado.whatsapp = await enviarWhatsapp(mensajeWhatsapp(pendientes)).catch((e) => (console.error('[whatsapp]', e.message), { enviado: false, motivo: e.message }));
+  }
+  if (!pushActivo()) return resultado;
   if (pendientes.length > 3) {
-    notificacion = {
-      title: `${pendientes.length} avisos de precio`,
+    const r = await enviar({
+      title: `${pendientes.length} avisos`,
       body: pendientes.slice(0, 3).map((a) => textoAviso(a).title).join(' · '),
       url: '/',
       tag: 'mp-resumen',
-    };
-  } else {
-    const resultados = [];
-    for (const a of pendientes) {
-      const texto = textoAviso(a);
-      resultados.push(await enviar({ ...texto, url: a.q ? `/?q=${encodeURIComponent(a.q)}` : '/', tag: a.id || `${a.tipo}|${a.clave}` }));
-    }
-    return { enviadas: resultados.reduce((s, r) => s + (r.enviadas || 0), 0) };
+    });
+    return { ...resultado, enviadas: r.enviadas || 0 };
   }
-  return enviar(notificacion);
+  for (const a of pendientes) {
+    const texto = textoAviso(a);
+    const r = await enviar({ ...texto, url: a.url || (a.q ? `/?q=${encodeURIComponent(a.q)}` : '/'), tag: a.id || `${a.tipo}|${a.clave}` });
+    resultado.enviadas += r.enviadas || 0;
+  }
+  return resultado;
 }

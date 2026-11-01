@@ -1,0 +1,22 @@
+{
+  "reventa": {
+    "success": true,
+    "data": {
+      "count": 3,
+      "results": [
+        { "product_id": 1, "product_name": "Aguila Original 330ml", "unit_code": "und", "purchase_cost": "2600.00", "sale_price": "3500.00", "quantity": "100.0000", "min_quantity": "48.0000", "is_low": false, "is_active": true, "variants": [] },
+        { "product_id": 4, "product_name": "Aguardiente Antioqueño 750ml", "unit_code": "botella", "purchase_cost": "0.00", "sale_price": "48000.00", "quantity": "0", "min_quantity": "0", "is_low": false, "is_active": true,
+          "variants": [{ "variant_id": 9, "variant_name": "Tapa azul", "purchase_cost": "41000.00", "sale_price": "49000.00", "quantity": "5.0000", "min_quantity": "6.0000", "is_low": true }] },
+        { "product_id": 50, "product_name": "Hielo en cubo 3 kg", "unit_code": "bolsa", "purchase_cost": "1500.00", "sale_price": "5000.00", "quantity": "20.0000", "min_quantity": "5.0000", "is_low": false, "is_active": true, "variants": [] }
+      ]
+    }
+  },
+  "stock": { "success": true, "count": 2, "total_pages": 1, "next": null, "results": [
+    { "product_id": 1, "variant_id": null, "warehouse_id": 1, "quantity": "100.0000" },
+    { "product_id": 4, "variant_id": 9, "warehouse_id": 1, "quantity": "5.0000" }
+  ] },
+  "ventas": { "success": true, "data": [
+    { "product_id": 1, "name_snapshot": "Aguila Original 330ml", "quantity_sold": 30, "total_revenue": 105000, "orders_count": 10 },
+    { "product_id": 4, "name_snapshot": "Aguardiente Antioqueño 750ml", "quantity_sold": 2, "total_revenue": 98000, "orders_count": 2 }
+  ] }
+}

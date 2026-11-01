@@ -15,17 +15,17 @@ const ofertasDe = (grupo) =>
 
 export function agregarAlPedido(grupo, consulta) {
   const items = leer();
-  const clave = `${grupo.unidades || 1}x${grupo.ml}`;
+  const clave = grupo.clave;
   const previo = items.find((x) => x.q === consulta && x.clave === clave);
   if (previo) {
     previo.cantidad += 1;
     previo.ofertas = ofertasDe(grupo);
     previo.t = Date.now();
   } else {
-    items.push({ id: idNuevo(), q: consulta, clave, ml: grupo.ml, unidades: grupo.unidades || 1, nombre: `${consulta} · ${presentacion(grupo)}`, cantidad: 1, ofertas: ofertasDe(grupo), t: Date.now() });
+    items.push({ id: idNuevo(), q: consulta, clave, ml: grupo.ml, unidades: grupo.unidades || 1, nombre: `${consulta} · ${presentacion(grupo)}${grupo.variante ? ` · ${grupo.variante}` : ''}`, cantidad: 1, ofertas: ofertasDe(grupo), t: Date.now() });
   }
   guardar(items);
-  avisar(`Agregado al pedido: ${consulta} (${presentacion(grupo)}).`);
+  avisar(`Agregado al pedido: ${consulta} (${presentacion(grupo)}${grupo.variante ? ` · ${grupo.variante}` : ''}).`);
   pintarContador();
 }
 
@@ -132,7 +132,7 @@ async function actualizarPrecios() {
     try {
       const datos = await api(`/api/buscar?q=${encodeURIComponent(item.q)}&tiendas=${tiendas}`);
       registrar(datos);
-      const grupo = agrupar(datos, { soloDisponibles: false }).find((g) => g.clave === item.clave);
+      const grupo = agrupar(datos, { soloDisponibles: false, variantes: true }).find((g) => g.clave === item.clave);
       item.ofertas = grupo ? ofertasDe(grupo) : [];
       item.t = Date.now();
     } catch {

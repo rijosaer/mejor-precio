@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { comparar } from './comparador.js';
 import { actualizar, borrar, leer } from './almacen.js';
 import { horaLocal, leerConfig } from './config.js';
+import { refrescarMiTienda, refrescarTrivo } from './mitienda.js';
 import { notificarAvisos } from './push.js';
 import { codigoBarras, coincide, normalizar, palabrasClave } from './normalizar.js';
 import { cambios, claveDe, DIA, podar, punto, puntoDulce, sumarPunto } from '../public/reglas.js';
@@ -180,7 +181,8 @@ function avisosDeLista(item, doc, datos, masBarato, exactos, base) {
 function resumir(datos, esExacto, ahora) {
   const grupos = new Map();
   for (const t of datos.tiendas) {
-    if (!t.ok) continue;
+    // La tienda propia no es un lugar donde comprar para revender.
+    if (!t.ok || t.miTienda) continue;
     for (const p of t.productos) {
       if (!(p.precio > 0) || !p.ml || !esExacto(p)) continue;
       const clave = `${p.unidades || 1}x${p.ml}`;
@@ -299,7 +301,7 @@ export async function revisar({ maximo = 6, ahora = Date.now() } = {}) {
     const resultados = await Promise.all(
       tanda.map(async (item) => {
         try {
-          const datos = await comparar(item.q, { tiendas: config.tiendas });
+          const datos = await comparar(item.q, { tiendas: config.tiendas, miTienda: config.miTienda });
           // Si todas las tiendas fallaron no se marca como revisado: se reintenta en la próxima.
           if (!datos.tiendas.some((t) => t.ok)) return { q: item.q, ok: false };
           const nuevos = await registrar(item, datos, { ahora, notificar: false });
@@ -318,9 +320,13 @@ export async function revisar({ maximo = 6, ahora = Date.now() } = {}) {
     ...(await resumenSemanal({ ahora, config, lista }).catch((e) => (console.error('[semanal]', e.message), []))),
   ];
   if (sistema.length) await sumarAlertas(SISTEMA, sistema);
+  // Mi tienda: unos pocos productos por hora, así el análisis se mantiene al día solo.
+  // Costos, existencias y ventas de TRIVO (solo lectura), cada 6 horas.
+  const trivo = await refrescarTrivo({ ahora }).catch((e) => (console.error('[trivo]', e.message), false));
+  const miTienda = await refrescarMiTienda({ maximo: pendientes.length ? 2 : 4, ahora }).catch((e) => (console.error('[mi tienda]', e.message), 0));
   // También se llama sin avisos: así salen los que esperaban fuera del horario de silencio.
   await notificarAvisos([...avisos, ...sistema], { ahora }).catch((e) => console.error('[push]', e.message));
-  return { revisados: hechos, quedan: vencidos.length - pendientes.length, sistema: sistema.length };
+  return { revisados: hechos, quedan: vencidos.length - pendientes.length, sistema: sistema.length, miTienda, trivo };
 }
 
 // ── Salud de las tiendas ────────────────────────────────────────────────────

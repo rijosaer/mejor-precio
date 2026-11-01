@@ -288,3 +288,71 @@ En Catálogo, cada producto que vendes tiene «Compré», «Vendí» y «Contar�
 - 10 intentos fallidos cada 15 minutos por IP, contados también en Netlify Blobs (vale para todas las instancias).
 - Las rutas que cambian datos exigen `content-type: application/json`, que un formulario de otro sitio no puede mandar.
 - El service worker solo guarda respuestas correctas: un error nunca reemplaza la copia buena.
+
+## 15. Mi tienda
+
+**Archivos:** `src/mitienda.js`, `public/mitienda.js`, `public/precios.js` · **Tests:** `tests/mitienda.test.js`
+
+La tienda propia se elige en **Ajustes → Mi tienda** (por defecto Agua Pure; también puede ser un proveedor propio). En las búsquedas no compite: sale como «Tu precio» en cada grupo, y el catálogo de reventa y Mi pedido no la cuentan como lugar de compra.
+
+Para cada producto de la carta (`catalogo()` de `src/tiendas/aguapure.js`) se arma una búsqueda sin las palabras de presentación («cerveza aguila 330») y se consulta el resto de las tiendas. La **referencia** es lo más barato a lo que llega un cliente: el mismo paquete en otra tienda o, si sale menos, el mejor precio por unidad del mismo tamaño multiplicado por las unidades. Las cajas «+ Hielo (3 kilos)» se comparan sin lo que cobras por 3 kg de hielo.
+
+```
+objetivo  = referencia × (1 + sobreMinimo % + recargoFria % si es «Fría»)
+piso      = costo × (1 + margenMin %)            (si anotaste el costo)
+sugerido  = máx(objetivo, piso) + hielo, redondeado
+acción    = subir / bajar si el cambio es ≥ tolerancia %; si no, mantener
+```
+
+Los resultados se guardan en `mitienda/<id>` y los costos en `mitienda-costos`. El monitoreo de cada hora vuelve a comparar los productos con más de 20 horas.
+
+### TRIVO POS con sesión (solo lectura)
+
+**Archivos:** `src/trivo.js`, `emparejarTrivo` / `sincronizarTrivo` en `src/mitienda.js` · **Tests:** `tests/trivo.test.js`
+
+Con `TRIVO_USUARIO` y `TRIVO_CLAVE` en el servidor, `src/trivo.js` entra (`GET /api/auth/csrf/` → cookie `csrftoken`; `POST /api/auth/login/` con `{username, password}` y `X-CSRFToken` → cookies `access_token` y `refresh_token`) y **solo lee**:
+
+| Ruta | Qué se usa |
+| --- | --- |
+| `/api/inventory/resale-products/` | `purchase_cost` (costo de compra), `sale_price`, `quantity`, `min_quantity`, `is_low`, `unit_code`; lo mismo por variante en `variants[]` |
+| `/api/inventory/product-stock/` | `quantity` por bodega y variante (paginado); se suman las bodegas |
+| `/api/reports/sales-by-product/?date_from=&date_to=` | `quantity_sold`, `total_revenue`, `orders_count` por producto (todas las variantes juntas), últimos 30 días en hora de Colombia |
+
+Emparejamiento con la carta (los id de la carta son los de TRIVO, `producto` o `producto-variante`):
+
+- **directo:** el producto o su variante está en «Compra y reventa»: su costo y sus existencias.
+- **calculado:** los paquetes (x 6, x 24) y las cajas «+ Hielo» son combos sin costo propio. Se busca la lata suelta (`und`) del mismo tamaño cuya marca contiene a la otra («Club Colombia» ↔ «Club Colombia Dorada»; si hay dos, gana el nombre exacto): costo = unidades × costo de la lata (la variante «Caliente» si tiene) + el hielo de 3 kg en las cajas. Las existencias son las latas y para cuántos paquetes alcanzan.
+
+`POST /api/mi-tienda/trivo` (botón «Leer TRIVO», y el monitoreo cada hora) guarda esos costos en `mitienda-costos` (reemplazan los anotados a mano de esos productos; los demás se quedan) y existencias y ventas en `mitienda-trivo`. Así el precio sugerido usa el costo real y no baja del margen mínimo.
+
+### Precios por compras: tu margen, con tu aprobación
+
+**Archivos:** `cambiarPrecio` y `comprasRecientes` en `src/trivo.js`; `cambiosPorCompra`, `proponerPrecios`, `aplicarPropuesta`, `deshacerCambio` en `src/mitienda.js`; `precioConMargen` en `public/precios.js`.
+
+1. **Detección.** TRIVO no tiene webhooks, así que el monitoreo lee TRIVO cada hora (y el botón «Leer TRIVO» al momento). Una compra es un movimiento `type=purchase` de `/api/inventory/movements/` (lo crean tanto la orden de compra recibida como la compra manual) con id mayor que `ultimaCompra`; también cuenta un `purchase_cost` distinto del de la lectura anterior. Una compra de la lata toca también sus paquetes (x 6, x 24, caja con hielo).
+2. **Precio.** Como en la ficha de TRIVO: margen sobre el precio de venta, `precio = costo ÷ (1 − margen %)`. Las «Fría» llevan el recargo de las frías de la regla; si el producto tiene una promo de valor fijo, se suma para que lo que paga el cliente deje el margen. Redondeo **siempre hacia arriba a la centena** (3.215 → 3.300; 3.200 se queda). El margen es el general (20 % por defecto) o el del producto (`mitienda-margen`). Se aplica tu margen aunque el mercado esté más barato.
+3. **Aprobación.** Las propuestas quedan en `mitienda-propuestas` y llega un aviso push. Nada cambia en TRIVO hasta tocar «Aplicar» (o «Aplicar todos», con confirmación; un cambio de 30 % o más pide confirmar).
+4. **Aplicar.** `cambiarPrecio` lee el producto, comprueba que el precio en TRIVO siga siendo el de la propuesta (si alguien lo cambió, no lo pisa), manda `PATCH /api/catalog/products/<id>/` con `{base_price}` o `PATCH …/variants/<vid>/` con `{price}` y vuelve a leer para confirmar. Es la única escritura en TRIVO. Queda en `mitienda-historial-precios` con el antes y el después, y «Deshacer» vuelve al anterior con la misma comprobación.
+
+Rutas: `PUT /api/mi-tienda/margen`, `POST /api/mi-tienda/propuestas` (calcular todos), `DELETE /api/mi-tienda/propuestas?id=`, `POST /api/mi-tienda/aplicar`, `POST /api/mi-tienda/deshacer`.
+## 16. Avisos por WhatsApp al dueño
+
+**Archivos:** `src/whatsapp.js`, `notificarAvisos` y `mensajeWhatsapp` en `src/push.js`, `avisosDeAtencion` y `recordarPropuestas` en `src/mitienda.js` · **Tests:** `tests/whatsapp.test.js`
+
+Todos los avisos que salen como notificación push salen también por WhatsApp, del número de la empresa al WhatsApp personal del dueño, con la **API oficial de Meta (WhatsApp Cloud API)**. Mejor Precio lo hace por su cuenta; no usa el WhatsApp de TRIVO.
+
+- **Un solo mensaje por revisión** con todos los avisos pendientes (hasta 25 líneas) y el enlace a la app (`URL` de Netlify o `APP_URL`).
+- **Horario de silencio:** igual que el push; lo que llega de noche sale junto en la primera revisión de la mañana.
+- **Qué avisa:** bajas de precio, precio objetivo, ofertas, se agota / se agotó / volvió (Mi lista); tiendas que no responden y resumen semanal; compra en TRIVO con precios por aprobar y recordatorio diario si siguen esperando (más de 20 h); producto bajo el mínimo de existencias en TRIVO; precio por debajo del costo; TRIVO que deja de responder o vuelve. Los de TRIVO se avisan una vez, cuando aparecen.
+- **Texto o plantilla:** primero se manda un texto normal (gratis si el dueño escribió al número de la empresa en las últimas 24 horas). Si WhatsApp responde que pasó esa ventana (error 131047), se manda la plantilla aprobada con todo el texto en su variable `{{1}}` (sin saltos de línea; la plantilla sí tiene costo por mensaje según las tarifas de Meta).
+
+### Cómo conectarlo
+
+1. En [Meta for Developers](https://developers.facebook.com/) crea una app de tipo **Business** y agrégale **WhatsApp**. Agrega el número de la empresa (si ya usa la app WhatsApp Business, Meta permite conectarlo sin perder la app; si no, el número debe quedar solo para la API).
+2. En **Meta Business Suite → Usuarios del sistema** crea un usuario del sistema con permiso `whatsapp_business_messaging` y genera un **token permanente**.
+3. En **WhatsApp Manager → Plantillas** crea una plantilla de categoría **Utilidad**, idioma **Español**, nombre `aviso_mejor_precio`, con el cuerpo `{{1}}` (puede llevar texto fijo antes, por ejemplo «Mejor Precio: {{1}}»). Espera a que Meta la apruebe.
+4. En el servidor pon `WHATSAPP_TOKEN` (el token) y `WHATSAPP_PHONE_ID` (el *Phone number ID* del número de la empresa, en WhatsApp → Configuración de la API). Opcionales: `WHATSAPP_PLANTILLA`, `WHATSAPP_IDIOMA` (por defecto `es`), `WHATSAPP_DESTINO`.
+5. En la app, **Ajustes → Notificaciones → WhatsApp del dueño**: escribe el número (300 123 4567 se guarda como 573001234567) y toca «Enviar una prueba».
+6. El dueño puede escribirle «hola» al número de la empresa: durante 24 horas los avisos salen como texto normal.
+
+Rutas: `GET/PUT /api/whatsapp` (número y encendido), `POST /api/whatsapp/probar`.

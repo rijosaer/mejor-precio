@@ -2,7 +2,7 @@
 // piden al servidor (nunca se muestran precios guardados como si fueran nuevos).
 // También recibe las notificaciones push del monitoreo.
 // Debe ser `mp-` + la versión más reciente de public/novedades.js.
-const VERSION = 'mp-2.0';
+const VERSION = 'mp-2.5';
 const ARCHIVOS = [
   './',
   'index.html',
@@ -16,6 +16,9 @@ const ARCHIVOS = [
   'estado.js',
   'inventario.js',
   'lista.js',
+  'mitienda.js',
+  'precios.js',
+  'listas-sugeridas.js',
   'novedades.js',
   'optimizar.js',
   'pedido.js',

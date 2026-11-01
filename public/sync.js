@@ -67,7 +67,7 @@ export async function sincronizar() {
 }
 
 export const resumenes = () => guardado('mp-resumenes') || {};
-export const configServidor = () => guardado('mp-config') || { cadaHoras: 6, silencio: { activo: true, desde: 22, hasta: 7 }, resumenSemanal: true };
+export const configServidor = () => guardado('mp-config') || { cadaHoras: 6, silencio: { activo: true, desde: 22, hasta: 7 }, resumenSemanal: true, miTienda: 'aguapure' };
 
 // ── Tiendas ────────────────────────────────────────────────────────────────
 const TIENDAS_CONOCIDAS = [
@@ -77,6 +77,7 @@ const TIENDAS_CONOCIDAS = [
   { id: 'makro', nombre: 'Makro', porDefecto: true },
   { id: 'olimpica', nombre: 'Olímpica', porDefecto: true },
   { id: 'aguapure', nombre: 'Agua Pure', porDefecto: true },
+  { id: 'd1', nombre: 'D1', porDefecto: true },
 ];
 
 export async function catalogoTiendas() {

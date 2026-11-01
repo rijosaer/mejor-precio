@@ -168,3 +168,71 @@ test('la tapa roja es el aguardiente de siempre; la tapa azul es otra variante',
   assert.equal(resultados[0].productos[0].otraVariante, undefined);
   assert.ok(resultados[0].productos[1].otraVariante);
 });
+
+// Casos tomados de las respuestas reales de las tiendas (noviembre de 2026).
+test('nombres reales: variantes abreviadas, «#» por Ñ, no bebidas y six pack con el total', async () => {
+  const { esBebida, mlPorUnidad, repararNombre, variantesNoPedidas } = await import('../src/normalizar.js');
+  const p = (nombre) => ({ nombre });
+  const aguila = palabrasClave('cerveza aguila');
+  assert.deepEqual(variantesNoPedidas(p('CERVEZA AGUILA S/ALCOHOL 330ML X6'), aguila), ['Sin alcohol']);
+  assert.deepEqual(variantesNoPedidas(p('Cerveza Aguila 0,0 lata x330ml'), aguila), ['Sin alcohol']);
+  assert.deepEqual(variantesNoPedidas(p('Cerveza Aguila Imperial Botella 330ml'), aguila), ['Imperial']);
+  assert.deepEqual(variantesNoPedidas(p('Cerveza Club Colombia Roja Lata 330 ml'), palabrasClave('cerveza club colombia 330')), ['Roja']);
+  assert.deepEqual(variantesNoPedidas(p('Cerveza Club Colombia Roja Lata 330 ml'), palabrasClave('club colombia roja')), []);
+  assert.deepEqual(variantesNoPedidas(p('Aguardiente Antioqueño tapa roja 750 ml'), palabrasClave('antioqueño')), [], 'la tapa roja sigue siendo la normal');
+  assert.deepEqual(variantesNoPedidas(p('Aguardiente Antioqueño Verde S/A 750 Ml'), palabrasClave('antioqueño')), ['Sin azúcar', 'Verde']);
+  assert.deepEqual(variantesNoPedidas(p('Whisky Johnnie Walker Double Black Label 700 ml'), palabrasClave('johnnie walker black')), ['Double']);
+  assert.deepEqual(variantesNoPedidas(p("Pack Buchanan's 12 Años 750ml Gratis Botella de 200ml"), palabrasClave('buchanans 12')), ['Con obsequio']);
+  assert.equal(repararNombre('RON MEDELLIN A#EJO BOT 750 ML'), 'RON MEDELLIN AÑEJO BOT 750 ML');
+  assert.equal(repararNombre('Cerveza #1'), 'Cerveza #1', 'un # que no está entre mayúsculas se queda');
+  assert.ok(!esBebida(p('Destapador Botella Cerveza Aguila Con Iman'), aguila));
+  assert.ok(esBebida(p('Cerveza Aguila lata 330 ml'), aguila));
+  assert.equal(mlPorUnidad(1614, 6), 269);
+  assert.equal(mlPorUnidad(1980, 6), 330);
+  assert.equal(mlPorUnidad(1750, 1), 1750, 'una garrafa no se divide');
+  assert.equal(mlPorUnidad(1050, 2), 1050, 'si no da un tamaño conocido, se deja');
+  assert.equal(mlPorUnidad(1860, 6), 310);
+  const { extraerUnidades } = await import('../src/normalizar.js');
+  assert.equal(extraerUnidades('CERVEZA ANDINA LATA 310ML PAG11 LLEV12'), 12);
+  assert.equal(extraerUnidades('CERVEZA AGUILA LATA PAGUE 11 LLEVE 12 330MLX12U'), 12);
+  const andina = palabrasClave('cerveza andina 310');
+  assert.deepEqual(variantesNoPedidas(p('Refajo ANDINA sixpack (1860 ml)'), andina), ['Refajo']);
+  assert.deepEqual(variantesNoPedidas(p('CERVEZA ANDINA LIGH LATA 310 ML X6'), andina), ['Light']);
+  assert.deepEqual(variantesNoPedidas(p('CERVEZA ANDINA LIGH LATA 310 ML X6'), palabrasClave('cerveza andina light')), [], 'pedir «light» cubre «ligh»');
+  assert.equal(mlPorUnidad(1260, 6), 210);
+  const { inferirPaquete } = await import('../src/normalizar.js');
+  assert.deepEqual(inferirPaquete('Cerveza STELLA ARTOIS lata (1614 ml)', 1614, 1), { ml: 269, unidades: 6 });
+  assert.deepEqual(inferirPaquete('Cerveza BUDWEISER lata (6456 ml)', 6456, 1), { ml: 269, unidades: 24 });
+  assert.deepEqual(inferirPaquete('Cerveza Botella PILSEN Nacional (1980 ml)', 1980, 1), { ml: 330, unidades: 6 });
+  assert.deepEqual(inferirPaquete('Refajo ANDINA refrescante (1500 ml)', 1500, 1), { ml: 1500, unidades: 1 }, 'no es cerveza');
+  assert.deepEqual(inferirPaquete('Aguardiente Antioqueño 1050 ml', 1050, 1), { ml: 1050, unidades: 1 });
+});
+
+test('cerveza sin alcohol: «Cero», «0,0», «libre de alcohol» y «S/ALCOHOL» son lo mismo, y no se mezclan con la Light', async () => {
+  const { variantesNoPedidas } = await import('../src/normalizar.js');
+  const nombres = [
+    'Cerveza Aguila Cero Lata 330 ml',
+    'Cerveza AGUILA lata cero libre de alcohol (330 ml)',
+    'Cerveza Aguila 0,0% lata x6unds x330ml',
+    'CERVEZA AGUILA S/ALCOHOL 330ML X6',
+    'Cerveza Águila sin Alcohol Lata 330 Ml',
+  ];
+  const aguila = palabrasClave('cerveza aguila');
+  for (const n of nombres) assert.deepEqual(variantesNoPedidas({ nombre: n }, aguila), ['Sin alcohol'], n);
+  assert.deepEqual(variantesNoPedidas({ nombre: 'Cerveza AGUILA LIGHT lata sabor sin igual (330 ml)' }, aguila), ['Light'], '«sabor sin igual» es el eslogan, no un sabor');
+  // Buscar la sin alcohol con cualquiera de sus nombres trae todas y deja fuera la Light.
+  const productos = [...nombres, 'Cerveza Aguila Light Lata 330 ml', 'Cerveza Aguila Lata 330 ml'].map((n) => producto(n));
+  for (const q of ['cerveza aguila sin alcohol', 'aguila cero', 'cerveza aguila cero']) {
+    const salida = filtrarProductos(productos, palabrasClave(q)).map((p) => p.nombre);
+    assert.deepEqual(salida.sort(), [...nombres].sort(), q);
+  }
+  // Y al buscar la Light no aparece la sin alcohol.
+  const light = filtrarProductos(productos, palabrasClave('cerveza aguila light')).map((p) => p.nombre);
+  assert.deepEqual(light, ['Cerveza Aguila Light Lata 330 ml']);
+});
+
+test('el agua con gas es otra variante del agua', async () => {
+  const { variantesNoPedidas } = await import('../src/normalizar.js');
+  assert.deepEqual(variantesNoPedidas({ nombre: 'Agua con gas CRISTAL botella (600 ml)' }, palabrasClave('agua cristal 600')), ['Con gas']);
+  assert.deepEqual(variantesNoPedidas({ nombre: 'Agua con gas CRISTAL botella (600 ml)' }, palabrasClave('agua cristal con gas')), []);
+});

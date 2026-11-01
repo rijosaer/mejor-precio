@@ -169,9 +169,73 @@ async function pintarPush() {
   caja.append(botones);
 }
 
+// ── WhatsApp del dueño (desde el número de la empresa) ─────────────────────
+async function pintarWhatsapp() {
+  const caja = $('#aj-whatsapp');
+  caja.replaceChildren();
+  const texto = el('p', 'ayuda');
+  caja.append(texto);
+  let wa;
+  try {
+    wa = await api('/api/whatsapp');
+  } catch {
+    texto.textContent = 'No se pudo consultar el servidor.';
+    return;
+  }
+  if (!wa.servidor) {
+    texto.textContent = 'Todos los avisos (precios, compras por aprobar, existencias bajas, productos bajo el costo, tiendas caídas, resumen semanal) pueden llegar al WhatsApp del dueño desde el número de la empresa. Falta conectar la API de WhatsApp de Meta en el servidor: WHATSAPP_TOKEN y WHATSAPP_PHONE_ID (ver docs/como-funciona.md).';
+    return;
+  }
+  texto.textContent = wa.numero
+    ? `${wa.activo ? 'Los avisos llegan' : 'Apagado: los avisos no llegan'} al WhatsApp +${wa.numero}.${wa.ultimo ? ` Último mensaje ${new Date(wa.ultimo.t).toLocaleString('es-CO')}.` : ''}`
+    : 'Escribe el WhatsApp personal del dueño: ahí llegan todos los avisos que piden atención, en un solo mensaje por revisión y respetando el horario de silencio.';
+  const fila = el('div', 'rejilla');
+  const etiqueta = el('label', '', 'WhatsApp del dueño');
+  const numero = el('input');
+  numero.type = 'tel';
+  numero.inputMode = 'tel';
+  numero.placeholder = '300 123 4567';
+  numero.value = wa.numero ? `+${wa.numero}` : '';
+  etiqueta.append(numero);
+  fila.append(etiqueta);
+  const activo = el('label', 'opciones');
+  const marca = el('input');
+  marca.type = 'checkbox';
+  marca.checked = wa.activo;
+  activo.append(marca, ' Enviar los avisos por WhatsApp');
+  const guardar = async (cambios) => {
+    try {
+      await api('/api/whatsapp', { method: 'PUT', cuerpo: cambios });
+      pintarWhatsapp();
+    } catch (error) {
+      numero.setCustomValidity(error.message);
+      numero.reportValidity();
+    }
+  };
+  numero.addEventListener('input', () => numero.setCustomValidity(''));
+  numero.addEventListener('change', () => guardar({ numero: numero.value }));
+  marca.addEventListener('change', () => guardar({ activo: marca.checked }));
+  const botones = el('div', 'aj-botones');
+  if (wa.numero) {
+    botones.append(
+      boton('Enviar una prueba', 'boton-texto', async (e) => {
+        e.target.disabled = true;
+        const r = await api('/api/whatsapp/probar', { method: 'POST', cuerpo: {} }).catch((error) => ({ error: error.message }));
+        texto.textContent = r.error ? r.error : `Prueba enviada${r.via === 'plantilla' ? ' con la plantilla (el dueño no ha escrito en las últimas 24 h)' : ''}. Revisa el WhatsApp.`;
+        e.target.disabled = false;
+      }),
+    );
+  }
+  caja.append(fila, activo, botones);
+}
+
 // ── Monitoreo (vive en el servidor) ────────────────────────────────────────
 function pintarMonitoreo() {
   const c = configServidor();
+  const mia = $('#aj-mitienda');
+  mia.replaceChildren(new Option('Ninguna', ''));
+  for (const t of tiendas) mia.append(new Option(t.nombre, t.id));
+  mia.value = c.miTienda ?? '';
   $('#aj-mon-horas').value = String(c.cadaHoras);
   $('#aj-mon-silencio').checked = c.silencio.activo;
   $('#aj-mon-desde').value = c.silencio.desde;
@@ -185,6 +249,7 @@ async function guardarMonitoreo(activas) {
     silencio: { activo: $('#aj-mon-silencio').checked, desde: Number($('#aj-mon-desde').value), hasta: Number($('#aj-mon-hasta').value) },
     resumenSemanal: $('#aj-mon-semanal').checked,
     tiendas: Object.entries(activas).filter(([, v]) => v).map(([id]) => id),
+    miTienda: $('#aj-mitienda').value || null,
   };
   const r = await api('/api/config', { method: 'PUT', cuerpo: { config } });
   guardado('mp-config', r.config);
@@ -208,9 +273,9 @@ export async function abrirAjustes() {
   $('#aj-tema').value = a.apariencia.tema;
   $('#aj-letra').value = String(a.apariencia.letra);
   $('#aj-listo').textContent = '';
-  pintarMonitoreo();
 
   tiendas = await catalogoTiendas();
+  pintarMonitoreo();
   const cajaLog = $('#aj-log-tiendas');
   const cajaCb = $('#aj-cashback');
   cajaLog.replaceChildren();
@@ -231,6 +296,7 @@ export async function abrirAjustes() {
   pintarResumenLogistica();
   acciones.mostrar('ajustes');
   pintarPush();
+  pintarWhatsapp();
 }
 
 async function guardarPanelAjustes() {
