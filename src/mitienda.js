@@ -1,13 +1,15 @@
 // Mi tienda: la carta propia (Agua Pure en TRIVO POS, o un proveedor propio)
-// comparada producto por producto con el resto del mercado. Sin credenciales
-// se usan los precios de venta públicos; los costos se anotan a mano.
+// comparada producto por producto con el resto del mercado. Con las
+// credenciales de TRIVO (src/trivo.js, solo lectura) los costos de compra,
+// las existencias y las ventas salen de TRIVO; sin ellas, los costos se anotan a mano.
 import { createHash } from 'node:crypto';
 import { actualizar, leer } from './almacen.js';
 import { comparar } from './comparador.js';
 import { leerConfig } from './config.js';
-import { normalizar, tokens } from './normalizar.js';
+import { extraerMl, normalizar, tokens } from './normalizar.js';
 import { leerProveedores, idTienda } from './proveedores.js';
 import * as aguapure from './tiendas/aguapure.js';
+import { leerTrivo, trivoActivo } from './trivo.js';
 
 const VIGENCIA_HORAS = 20;
 const idDoc = (id) => `mitienda/${createHash('sha1').update(String(id)).digest('hex').slice(0, 20)}`;
@@ -126,12 +128,14 @@ export async function guardarCostos(cambios) {
 export async function estadoMiTienda() {
   const config = await leerConfig();
   if (!config.miTienda) return { miTienda: null, productos: [], costos: {} };
-  const [productos, costos] = await Promise.all([catalogoPropio(config.miTienda), leerCostos()]);
+  const [productos, costos, trivo] = await Promise.all([catalogoPropio(config.miTienda), leerCostos(), leer('mitienda-trivo')]);
   const resultados = await Promise.all(productos.map((p) => leer(idDoc(p.id))));
+  const deTrivo = config.miTienda === 'aguapure' && trivo;
   return {
     miTienda: config.miTienda,
-    productos: productos.map((p, i) => ({ ...p, resultado: resultados[i] })),
+    productos: productos.map((p, i) => ({ ...p, resultado: resultados[i], trivo: deTrivo ? trivo.productos?.[p.id] || null : null })),
     costos,
+    trivo: config.miTienda === 'aguapure' ? { activo: trivoActivo(), t: trivo?.t ?? null, desde: trivo?.desde ?? null, hasta: trivo?.hasta ?? null, dias: trivo?.dias ?? null, sinPareja: trivo?.sinPareja ?? [], error: trivo?.error ?? null } : null,
   };
 }
 
@@ -145,4 +149,133 @@ export async function refrescarMiTienda({ maximo = 4, ahora = Date.now() } = {})
     .slice(0, maximo);
   for (const p of viejos) await analizarProducto(p.id, { ahora }).catch((e) => console.error('[mi tienda]', p.nombre, e.message));
   return viejos.length;
+}
+
+// ── TRIVO: costos reales, existencias y ventas ──────────────────────────────
+const VIGENCIA_TRIVO_HORAS = 6;
+
+// Palabras de la marca: «Caja de Club Colombia x 330 ml + Hielo» → [club, colombia].
+const marca = (nombre) => tokens(String(nombre).split(/\s+x\s+/i)[0]).filter((t) => !SOBRAN.has(t) && !/\d/.test(t));
+const contiene = (a, b) => b.every((t) => a.includes(t));
+
+// La lata o botella suelta de TRIVO de la que sale un paquete de la carta: el
+// mismo tamaño y una marca que contiene a la otra («Miller» ↔ «Miller lite»).
+function unidadBase(producto, reventa) {
+  if (!producto.ml || !(producto.unidades > 1)) return null;
+  const m = marca(producto.base || producto.nombre);
+  if (!m.length) return null;
+  const candidatos = reventa.filter((r) => {
+    if (r.unidad !== 'und' || extraerMl(r.nombre) !== producto.ml) return false;
+    const mr = marca(r.nombre);
+    return mr.length && (contiene(mr, m) || contiene(m, mr));
+  });
+  if (candidatos.length === 1) return candidatos[0];
+  const exactos = candidatos.filter((r) => marca(r.nombre).join(' ') === m.join(' '));
+  return exactos.length === 1 ? exactos[0] : null;
+}
+
+// El costo de una unidad suelta: el del producto o, si va por variantes, el de
+// la «Caliente» (la lata sin enfriar), o el menor.
+function costoUnidad(r) {
+  if (r.costo > 0 && !r.variantes.length) return r.costo;
+  const conCosto = r.variantes.filter((v) => v.costo > 0);
+  const caliente = conCosto.find((v) => /caliente|natural|al clima/i.test(v.nombre));
+  if (caliente) return caliente.costo;
+  if (conCosto.length) return Math.min(...conCosto.map((v) => v.costo));
+  return r.costo > 0 ? r.costo : null;
+}
+
+function existenciasDe(r, variante, stock) {
+  if (variante) return stock.get(`${r.id}-${variante.id}`) ?? variante.existencias;
+  if (r.variantes.length) {
+    const suma = r.variantes.reduce((t, v) => t + (stock.get(`${r.id}-${v.id}`) ?? v.existencias ?? 0), 0);
+    return stock.has(String(r.id)) ? Math.max(suma, stock.get(String(r.id))) : suma;
+  }
+  return stock.get(String(r.id)) ?? r.existencias;
+}
+
+// Para cada producto de la carta: costo, existencias y ventas de TRIVO.
+//   directo:   el producto (o su variante) está en «Compra y reventa».
+//   calculado: un paquete de la carta (x 6, x 24, caja + hielo) que en TRIVO
+//              no tiene costo propio: unidades × costo de la lata + el hielo.
+export function emparejarTrivo(carta, { productos: reventa, stock, ventas }) {
+  const porId = new Map(reventa.map((r) => [String(r.id), r]));
+  const hielo3 = reventa.find((r) => /hielo/i.test(r.nombre) && /\b3\s*kg/i.test(r.nombre));
+  const resultado = {};
+  const sinPareja = [];
+  for (const p of carta) {
+    const [idProducto, idVariante] = String(p.id).split('-');
+    const venta = ventas.get(idProducto) || null;
+    const datos = { ventas: venta ? { ...venta, todasLasVariantes: Boolean(idVariante) } : { unidades: 0, ingresos: 0, pedidos: 0, todasLasVariantes: Boolean(idVariante) } };
+    const directo = porId.get(idProducto);
+    if (directo) {
+      const variante = idVariante ? directo.variantes.find((v) => String(v.id) === idVariante) : null;
+      const costo = variante?.costo > 0 ? variante.costo : directo.costo > 0 && !idVariante ? directo.costo : costoUnidad(directo);
+      resultado[p.id] = {
+        ...datos,
+        fuente: 'directo',
+        costo: costo > 0 ? costo : null,
+        existencias: existenciasDe(directo, variante, stock),
+        minimo: variante?.minimo ?? directo.minimo,
+        bajo: variante ? variante.bajo : directo.bajo,
+      };
+      continue;
+    }
+    const base = unidadBase(p, reventa);
+    if (!base) {
+      resultado[p.id] = { ...datos, fuente: null, costo: null, existencias: null };
+      sinPareja.push(p.nombre);
+      continue;
+    }
+    // Sin costo de la lata (o del hielo que trae la caja) no se puede calcular el del paquete.
+    const unitario = costoUnidad(base);
+    const faltaHielo = p.conHielo && !(hielo3?.costo > 0);
+    const conHielo = p.conHielo && hielo3?.costo > 0 ? hielo3.costo : 0;
+    const latas = existenciasDe(base, null, stock);
+    resultado[p.id] = {
+      ...datos,
+      fuente: 'calculado',
+      costo: unitario && !faltaHielo ? Math.round(unitario * p.unidades + conHielo) : null,
+      detalle: `${p.unidades} × ${base.nombre}${conHielo ? ' + hielo 3 kg' : ''}`,
+      existencias: latas,
+      alcanza: latas === null ? null : Math.max(0, Math.floor(latas / p.unidades)),
+      base: base.nombre,
+    };
+  }
+  return { productos: resultado, sinPareja };
+}
+
+// Lee TRIVO, guarda los costos reales en «mitienda-costos» (reemplazan los
+// anotados a mano de esos productos) y las existencias y ventas en «mitienda-trivo».
+export async function sincronizarTrivo({ ahora = Date.now(), dias = 30 } = {}) {
+  if (!trivoActivo()) throw new TypeError('Faltan TRIVO_USUARIO y TRIVO_CLAVE en el servidor');
+  const config = await leerConfig();
+  if (config.miTienda !== 'aguapure') throw new TypeError('TRIVO solo se usa cuando tu tienda es Agua Pure');
+  let datos;
+  try {
+    datos = await leerTrivo({ ahora, dias });
+  } catch (error) {
+    await actualizar('mitienda-trivo', (actual) => ({ ...(actual || {}), error: error.message, tError: ahora }));
+    // Un fallo de red («fetch failed») es TypeError: no es un error de quien llama.
+    throw new Error(error.message);
+  }
+  const carta = await catalogoPropio('aguapure');
+  const { productos, sinPareja } = emparejarTrivo(carta, datos);
+  const reales = Object.fromEntries(Object.entries(productos).filter(([, x]) => x.costo > 0).map(([id, x]) => [id, x.costo]));
+  const costos = await guardarCostos(reales);
+  const doc = { t: ahora, desde: datos.desde, hasta: datos.hasta, dias, productos, sinPareja, error: null };
+  await actualizar('mitienda-trivo', () => doc);
+  return { ...doc, costos, conCosto: Object.keys(reales).length };
+}
+
+// Para el monitoreo: vuelve a leer TRIVO cada 6 horas.
+export async function refrescarTrivo({ ahora = Date.now() } = {}) {
+  if (!trivoActivo()) return false;
+  const config = await leerConfig();
+  if (config.miTienda !== 'aguapure') return false;
+  const doc = await leer('mitienda-trivo');
+  const ultimo = Math.max(doc?.t || 0, doc?.tError || 0);
+  if (ahora - ultimo < VIGENCIA_TRIVO_HORAS * 60 * 60_000) return false;
+  await sincronizarTrivo({ ahora });
+  return true;
 }

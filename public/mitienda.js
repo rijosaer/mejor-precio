@@ -1,9 +1,10 @@
 // Mi tienda: cada producto de tu carta (Agua Pure) frente al más barato de
-// las demás tiendas, con el precio sugerido según tu regla. Los costos se
-// anotan a mano mientras no haya acceso a TRIVO con credenciales.
+// las demás tiendas, con el precio sugerido según tu regla. Con acceso a TRIVO
+// (solo lectura) los costos reales, las existencias y las ventas de 30 días
+// salen de TRIVO; sin él, los costos se anotan a mano.
 import { ajustes, guardarAjustes } from './datos.js';
 import { escribirCsv } from './csv.js';
-import { limpiarRegla, sugerirPrecio } from './precios.js';
+import { limpiarRegla, resumenInventario, sugerirPrecio } from './precios.js';
 import { subirAjustes } from './sync.js';
 import { $, acciones, api, boton, descargar, el, guardado, hace, pesos, presentacion } from './util.js';
 
@@ -11,6 +12,8 @@ const VIGENCIA = 20 * 60 * 60_000;
 let estado = guardado('mp-mitienda') || null; // { miTienda, productos, costos }
 let filtro = 'todos';
 let analizando = false;
+let leyendoTrivo = false;
+const VIGENCIA_TRIVO = 6 * 60 * 60_000;
 
 const regla = () => limpiarRegla(ajustes().miTiendaRegla);
 
@@ -69,8 +72,18 @@ function tarjeta(p) {
   if (p.resultado?.t) chips.append(el('span', 'chip', `Comparado ${hace(p.resultado.t)}`));
   caja.append(chips, el('p', 'ayuda mt-ref', textoReferencia(p.resultado)));
 
+  const inv = resumenInventario(p.trivo, estado.trivo?.dias || 30);
+  if (inv && (inv.existencias || inv.ventas)) {
+    const fila = el('div', 'fila-hist mt-inventario');
+    if (inv.existencias) fila.append(el('span', `chip ${inv.agotado || inv.bajo ? 'chip-subio' : ''}`, `${inv.existencias}${inv.agotado ? ' · agotado' : inv.bajo ? ' · bajo el mínimo' : ''}`));
+    if (inv.ventas) fila.append(el('span', 'chip', inv.ventas));
+    if (inv.cobertura !== null) fila.append(el('span', 'chip', `Alcanza para unos ${inv.cobertura} días`));
+    caja.append(fila);
+  }
+
   const rejilla = el('div', 'rejilla cat-rejilla');
-  const costo = el('label', '', 'Tu costo ($)');
+  const deTrivo = p.trivo?.costo > 0;
+  const costo = el('label', '', deTrivo ? (p.trivo.fuente === 'calculado' ? 'Tu costo ($) · calculado de TRIVO' : 'Tu costo ($) · de TRIVO') : 'Tu costo ($)');
   const entrada = el('input');
   entrada.type = 'number';
   entrada.inputMode = 'numeric';
@@ -93,6 +106,7 @@ function tarjeta(p) {
   costo.append(entrada);
   rejilla.append(costo);
   caja.append(rejilla);
+  if (deTrivo) caja.append(el('p', 'ayuda', p.trivo.fuente === 'calculado' ? `${p.trivo.detalle}. Si lo cambias aquí, la próxima lectura de TRIVO lo vuelve a poner.` : 'Costo de compra en TRIVO. Si lo cambias aquí, la próxima lectura de TRIVO lo vuelve a poner.'));
 
   const salida = el('div', 'panel-salida');
   const linea = (t, v, c = '') => {
@@ -146,6 +160,7 @@ function pintar() {
     return;
   }
   $('#mt-nombre').textContent = estado.nombre || 'Agua Pure';
+  pintarTrivo();
   const analizados = estado.productos.map((p) => ({ p, a: analisis(p) }));
   const cuenta = (f) => analizados.filter(({ a }) => GRUPOS[f](a)).length;
   const dato = (n, texto, clave, clase = '') => {
@@ -171,6 +186,48 @@ function pintar() {
   if (!caja.childElementCount) caja.append(el('p', 'ayuda', 'Ningún producto en este grupo.'));
   const viejos = estado.productos.filter((p) => p.ml && (!p.resultado || Date.now() - p.resultado.t > VIGENCIA)).length;
   $('#mt-actualizar').textContent = viejos ? `Comparar ${viejos} pendientes` : 'Comparar todo de nuevo';
+}
+
+function pintarTrivo() {
+  const t = estado?.trivo;
+  const b = $('#mt-trivo');
+  const nota = $('#mt-trivo-estado');
+  b.hidden = !t?.activo;
+  if (!t) {
+    nota.hidden = true;
+    return;
+  }
+  nota.hidden = false;
+  if (!t.activo) {
+    nota.textContent = 'Sin acceso a TRIVO POS: los costos se anotan a mano. Con TRIVO_USUARIO y TRIVO_CLAVE en el servidor salen solos tus costos reales, las existencias y las ventas.';
+    return;
+  }
+  const partes = [];
+  partes.push(t.t ? `TRIVO leído ${hace(t.t)} (solo lectura): costos de compra, existencias y ventas del ${t.desde} al ${t.hasta}.` : 'TRIVO conectado (solo lectura). Toca «Leer TRIVO» para traer costos, existencias y ventas.');
+  if (t.sinPareja?.length) partes.push(`Sin pareja en TRIVO: ${t.sinPareja.join(', ')}.`);
+  if (t.error) partes.push(`Último intento con error: ${t.error}.`);
+  partes.push('Los precios no se cambian en TRIVO desde aquí.');
+  nota.textContent = partes.join(' ');
+}
+
+async function leerTrivo({ auto = false } = {}) {
+  if (leyendoTrivo || !estado?.trivo?.activo) return;
+  leyendoTrivo = true;
+  const b = $('#mt-trivo');
+  b.disabled = true;
+  b.textContent = 'Leyendo TRIVO…';
+  try {
+    const datos = await api('/api/mi-tienda/trivo', { method: 'POST', cuerpo: {} });
+    estado = { ...datos, nombre: estado.nombre };
+    guardado('mp-mitienda', estado);
+  } catch (error) {
+    if (!auto) $('#mt-estado').replaceChildren(el('p', 'error', error.message));
+  } finally {
+    leyendoTrivo = false;
+    b.disabled = false;
+    b.textContent = 'Leer TRIVO';
+    pintar();
+  }
 }
 
 async function cargar() {
@@ -216,7 +273,7 @@ async function compararTodos() {
 }
 
 function exportar() {
-  const filas = [['producto', 'presentacion', 'mi_precio', 'referencia_mercado', 'tienda_referencia', 'diferencia_pct', 'accion', 'precio_sugerido', 'costo', 'margen_pct']];
+  const filas = [['producto', 'presentacion', 'mi_precio', 'referencia_mercado', 'tienda_referencia', 'diferencia_pct', 'accion', 'precio_sugerido', 'costo', 'costo_fuente', 'margen_pct', 'existencias', 'alcanza_paquetes', 'vendidos_30_dias', 'pedidos_30_dias']];
   for (const p of estado?.productos || []) {
     const a = analisis(p);
     filas.push([
@@ -229,7 +286,12 @@ function exportar() {
       a.accion,
       a.sugerido ?? '',
       estado.costos?.[p.id] ?? '',
+      p.trivo?.costo > 0 ? `trivo-${p.trivo.fuente}` : estado.costos?.[p.id] ? 'manual' : '',
       a.margen !== null ? a.margen.toFixed(1) : '',
+      p.trivo?.existencias ?? '',
+      p.trivo?.alcanza ?? '',
+      p.trivo?.ventas?.unidades ?? '',
+      p.trivo?.ventas?.pedidos ?? '',
     ]);
   }
   descargar(`mi-tienda-precios-${new Date().toISOString().slice(0, 10)}.csv`, escribirCsv(filas), 'text/csv;charset=utf-8');
@@ -240,10 +302,14 @@ export async function abrirMiTienda() {
   pintar();
   await cargar();
   pintar();
+  // TRIVO se vuelve a leer solo si la última lectura tiene más de 6 horas.
+  const t = estado?.trivo;
+  if (t?.activo && Date.now() - Math.max(t.t || 0) > VIGENCIA_TRIVO) leerTrivo({ auto: true });
 }
 
 export function configurarMiTienda() {
   $('#mt-actualizar').addEventListener('click', compararTodos);
   $('#mt-exportar').addEventListener('click', exportar);
+  $('#mt-trivo').addEventListener('click', () => leerTrivo());
   for (const campo of ['sobreMinimo', 'recargoFria', 'tolerancia', 'margenMin', 'redondeo']) $(`#mt-${campo}`).addEventListener('change', guardarRegla);
 }

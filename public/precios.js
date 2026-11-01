@@ -47,7 +47,10 @@ export function sugerirPrecio(producto, resultado, costo, reglaEntrada) {
 
   if (!(ref > 0)) {
     // Sin mercado: solo se puede cuidar el margen.
-    if (piso && producto.precio < piso) return { ...base, estado: 'perdida', accion: 'subir', sugerido: Math.ceil(piso / regla.redondeo) * regla.redondeo, motivo: 'sin-mercado-bajo-costo' };
+    if (piso && producto.precio < piso) {
+      const sugerido = Math.ceil(piso / regla.redondeo) * regla.redondeo;
+      return { ...base, estado: 'perdida', accion: 'subir', sugerido, cambio: ((sugerido - producto.precio) / producto.precio) * 100, motivo: 'sin-mercado-bajo-costo' };
+    }
     return { ...base, estado: 'sin-mercado', accion: 'mantener', sugerido: null, motivo: 'sin-mercado' };
   }
 
@@ -64,4 +67,28 @@ export function sugerirPrecio(producto, resultado, costo, reglaEntrada) {
   if (Math.abs(cambio) >= regla.tolerancia) accion = cambio > 0 ? 'subir' : 'bajar';
   const estado = piso && producto.precio < piso ? 'perdida' : diferencia > regla.tolerancia ? 'caro' : diferencia < -regla.tolerancia ? 'barato' : 'en-mercado';
   return { ...base, diferencia, estado, accion, sugerido: accion === 'mantener' ? producto.precio : sugerido, cambio: accion === 'mantener' ? 0 : cambio, motivo };
+}
+
+// Existencias y ventas de TRIVO de un producto de Mi tienda, en frases cortas.
+// t: { fuente, existencias, alcanza, bajo, ventas: { unidades, pedidos, todasLasVariantes } }
+export function resumenInventario(t, dias = 30) {
+  if (!t) return null;
+  const miles = (n) => Math.round(n).toLocaleString('es-CO');
+  const r = { existencias: null, ventas: null, cobertura: null, bajo: Boolean(t.bajo), agotado: false };
+  if (t.fuente === 'calculado' && t.existencias !== null && t.existencias !== undefined) {
+    r.existencias = `${miles(t.existencias)} latas en TRIVO · alcanzan para ${miles(t.alcanza ?? 0)}`;
+    r.agotado = !(t.alcanza > 0);
+  } else if (t.existencias !== null && t.existencias !== undefined) {
+    r.existencias = `${miles(t.existencias)} en existencia`;
+    r.agotado = !(t.existencias > 0);
+  }
+  const v = t.ventas;
+  if (v) {
+    r.ventas = v.unidades > 0
+      ? `${miles(v.unidades)} vendidos en ${dias} días (${miles(v.pedidos)} ${v.pedidos === 1 ? 'pedido' : 'pedidos'})${v.todasLasVariantes ? ', todas las variantes' : ''}`
+      : `Sin ventas en ${dias} días`;
+    // Días que dura lo que hay al ritmo de venta (solo si es el mismo producto).
+    if (v.unidades > 0 && t.fuente === 'directo' && !v.todasLasVariantes && t.existencias > 0) r.cobertura = Math.round(t.existencias / (v.unidades / dias));
+  }
+  return r;
 }

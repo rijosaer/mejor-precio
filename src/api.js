@@ -6,7 +6,7 @@ import { catalogoTiendas, comparar, estadoTiendas } from './comparador.js';
 import { guardarAjustesCompartidos, guardarConfig, leerAjustesCompartidos, leerConfig } from './config.js';
 import { borrarMovimiento, leerMovimientos, registrarMovimiento } from './inventario.js';
 import { guardarLista, leerLista, novedades, registrarBusqueda, revisarSalud } from './monitor.js';
-import { analizarProducto, estadoMiTienda, guardarCostos } from './mitienda.js';
+import { analizarProducto, estadoMiTienda, guardarCostos, sincronizarTrivo } from './mitienda.js';
 import { borrarProveedor, guardarProveedor, leerProveedores } from './proveedores.js';
 import { clavePublica, desuscribir, enviar, pushActivo, suscribir, suscripciones } from './push.js';
 
@@ -250,6 +250,20 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
     }
     if (ruta === '/api/mi-tienda/costos' && metodo === 'PUT') {
       return validar(async () => json(200, { costos: await guardarCostos((await leerJson(request, 40_000)).costos) }));
+    }
+
+    // TRIVO (solo lectura): costos reales, existencias y ventas de 30 días.
+    if (ruta === '/api/mi-tienda/trivo' && metodo === 'POST') {
+      return validar(async () => {
+        try {
+          await sincronizarTrivo();
+        } catch (error) {
+          if (error instanceof TypeError) throw error;
+          console.error('[trivo]', error.message);
+          return json(502, { error: `No se pudo leer TRIVO: ${error.message}` });
+        }
+        return json(200, await estadoMiTienda());
+      });
     }
 
     // Proveedores propios (sin página web).

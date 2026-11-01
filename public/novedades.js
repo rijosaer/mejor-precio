@@ -9,6 +9,31 @@ import { $, boton, el, guardado } from './util.js';
 
 export const VERSIONES = [
   {
+    version: '2.3',
+    fecha: '2026-11-01',
+    titulo: 'Mi tienda con tus datos de TRIVO: costos reales, existencias y ventas',
+    cambios: [
+      {
+        titulo: 'Costos reales desde TRIVO',
+        antes: 'El costo de cada producto había que anotarlo a mano y, sin él, el precio sugerido no cuidaba tu margen.',
+        ahora: 'Se leen de TRIVO (solo lectura) y el precio sugerido nunca baja de tu costo + margen mínimo. Los paquetes x 6, x 24 y las cajas con hielo, que en TRIVO no tienen costo propio, se calculan con el costo de la lata (y del hielo de 3 kg).',
+        donde: 'mitienda',
+      },
+      {
+        titulo: 'Existencias y ventas de 30 días',
+        antes: 'Mi tienda no sabía cuánto tenías ni cuánto vendías.',
+        ahora: 'Cada producto muestra lo que hay en TRIVO (en los paquetes, para cuántos alcanzan las latas), lo vendido en los últimos 30 días y para cuántos días alcanza. También salen en el CSV.',
+        donde: 'mitienda',
+      },
+      {
+        titulo: 'Se actualiza solo',
+        antes: 'No había conexión con TRIVO.',
+        ahora: 'El botón «Leer TRIVO» trae todo al momento, y el monitoreo lo vuelve a leer cada 6 horas. Los precios no se cambian en TRIVO desde la app: «Aplicar en TRIVO» sigue apagado.',
+        donde: 'mitienda',
+      },
+    ],
+  },
+  {
     version: '2.2',
     fecha: '2026-11-01',
     titulo: 'Mi tienda: tus precios de Agua Pure frente al mercado',

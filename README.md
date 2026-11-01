@@ -31,7 +31,7 @@ Los ajustes, el historial y los avisos se guardan en el navegador (`localStorage
 - **Margen neto**: en la fila, **Margen** calcula `precio de venta − (compra + envío + comisión de pago + impuestos)` y avisa si da pérdida. Los valores por defecto se configuran en **Ajustes** y cada producto recuerda lo que escribiste.
 - **Logística**: en **Ajustes** marcas tu ubicación y la de cada tienda (enlace de Google Maps o `lat, lng`). Puedes ordenar los resultados por «precio + traslado», contando ida y vuelta con un costo por kilómetro. Las tiendas sin coordenadas cuentan con costo cero.
 - **Puntos y cashback**: porcentaje por tienda que se suma al margen de la calculadora.
-- **Mi tienda** (Agua Pure): cada producto de tu carta en TRIVO POS contra el más barato de las demás tiendas (el mismo paquete o juntando paquetes más chicos; las cajas con hielo sin el valor del hielo), con el precio sugerido según tu regla (cuánto sobre el más barato, recargo de las frías, margen mínimo sobre el costo, redondeo) y exportación en CSV. En las búsquedas tu tienda sale aparte como «Tu precio». Se actualiza sola, unos productos cada hora. Aplicar los precios en TRIVO, los costos reales, el inventario y las ventas necesitan credenciales de TRIVO (pendiente).
+- **Mi tienda** (Agua Pure): cada producto de tu carta en TRIVO POS contra el más barato de las demás tiendas (el mismo paquete o juntando paquetes más chicos; las cajas con hielo sin el valor del hielo), con el precio sugerido según tu regla (cuánto sobre el más barato, recargo de las frías, margen mínimo sobre el costo, redondeo) y exportación en CSV. En las búsquedas tu tienda sale aparte como «Tu precio». Se actualiza sola, unos productos cada hora. Con `TRIVO_USUARIO` y `TRIVO_CLAVE` lee de TRIVO (solo lectura) los costos reales —los paquetes y cajas, calculados desde la lata—, las existencias y las ventas de 30 días. Aplicar los precios en TRIVO sigue pendiente.
 - **Listas predeterminadas**: en Mi lista, 14 cervezas y 10 licores armados con búsquedas reales (cada uno en el tamaño que más tiendas comparan, entre 4 y 8 tiendas). Las cervezas también están como botones debajo del buscador.
 - **Búsqueda precisa**: palabra por palabra («ron» no trae «toronja»), la marca es obligatoria («johnnie walker black» no trae el Red Label), tolera abreviaturas y errores de una letra, oculta las variantes que no escribiste (zero, sin azúcar, tapa azul, sabores) y propone «¿Quisiste decir…?».
 - **Fotos y ficha**: cada fila trae la foto del producto; al tocarla se abre la ficha con la imagen grande, la presentación en cada tienda, el historial y el «mejor momento para comprar».
@@ -95,6 +95,8 @@ netlify login
 netlify deploy --prod            # la primera vez pide crear o elegir el sitio
 netlify env:set APP_PASSWORD "la-clave"
 netlify env:set SESSION_SECRET "texto-largo-aleatorio"
+netlify env:set TRIVO_USUARIO "usuario-de-trivo"   # opcional: costos, existencias y ventas de Mi tienda
+netlify env:set TRIVO_CLAVE "clave-de-trivo"
 netlify deploy --prod            # otra vez, para que la función tome las variables
 ```
 
@@ -104,7 +106,7 @@ Diferencias con el servidor propio: cada búsqueda tiene 10 segundos (cada tiend
 
 1. Sube esta carpeta a un repositorio de GitHub.
 2. En Railway: **New Project → Deploy from GitHub repo** y elige el repositorio. Railway detecta Node y usa `npm start`.
-3. En **Variables** agrega `APP_PASSWORD` y `SESSION_SECRET`.
+3. En **Variables** agrega `APP_PASSWORD` y `SESSION_SECRET` (y, para Mi tienda con TRIVO, `TRIVO_USUARIO` y `TRIVO_CLAVE`).
 4. En **Settings → Networking** genera un dominio público.
 5. Abre ese enlace en el teléfono, entra con la contraseña y en el menú del navegador elige **Agregar a pantalla de inicio** (Android) o **Compartir → Agregar a inicio** (iPhone).
 

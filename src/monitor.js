@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { comparar } from './comparador.js';
 import { actualizar, borrar, leer } from './almacen.js';
 import { horaLocal, leerConfig } from './config.js';
-import { refrescarMiTienda } from './mitienda.js';
+import { refrescarMiTienda, refrescarTrivo } from './mitienda.js';
 import { notificarAvisos } from './push.js';
 import { codigoBarras, coincide, normalizar, palabrasClave } from './normalizar.js';
 import { cambios, claveDe, DIA, podar, punto, puntoDulce, sumarPunto } from '../public/reglas.js';
@@ -321,10 +321,12 @@ export async function revisar({ maximo = 6, ahora = Date.now() } = {}) {
   ];
   if (sistema.length) await sumarAlertas(SISTEMA, sistema);
   // Mi tienda: unos pocos productos por hora, así el análisis se mantiene al día solo.
+  // Costos, existencias y ventas de TRIVO (solo lectura), cada 6 horas.
+  const trivo = await refrescarTrivo({ ahora }).catch((e) => (console.error('[trivo]', e.message), false));
   const miTienda = await refrescarMiTienda({ maximo: pendientes.length ? 2 : 4, ahora }).catch((e) => (console.error('[mi tienda]', e.message), 0));
   // También se llama sin avisos: así salen los que esperaban fuera del horario de silencio.
   await notificarAvisos([...avisos, ...sistema], { ahora }).catch((e) => console.error('[push]', e.message));
-  return { revisados: hechos, quedan: vencidos.length - pendientes.length, sistema: sistema.length, miTienda };
+  return { revisados: hechos, quedan: vencidos.length - pendientes.length, sistema: sistema.length, miTienda, trivo };
 }
 
 // ── Salud de las tiendas ────────────────────────────────────────────────────

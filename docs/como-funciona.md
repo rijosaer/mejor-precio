@@ -306,4 +306,23 @@ acción    = subir / bajar si el cambio es ≥ tolerancia %; si no, mantener
 
 Los resultados se guardan en `mitienda/<id>` y los costos en `mitienda-costos`. El monitoreo de cada hora vuelve a comparar los productos con más de 20 horas.
 
-**Pendiente (necesita credenciales de TRIVO POS):** costos reales de compra, existencias, ventas por producto y aplicar los precios aprobados. La API privada de TRIVO tiene `/api/inventory/resale-products/`, `/api/inventory/product-stock/`, `/api/reports/sales-by-product/`, `/api/purchasing/orders/` y `PATCH /api/catalog/products/<id>/`, con sesión por usuario y contraseña (`/api/auth/login/`, CSRF). Se usarían las variables `TRIVO_USUARIO` y `TRIVO_CLAVE`.
+### TRIVO POS con sesión (solo lectura)
+
+**Archivos:** `src/trivo.js`, `emparejarTrivo` / `sincronizarTrivo` en `src/mitienda.js` · **Tests:** `tests/trivo.test.js`
+
+Con `TRIVO_USUARIO` y `TRIVO_CLAVE` en el servidor, `src/trivo.js` entra (`GET /api/auth/csrf/` → cookie `csrftoken`; `POST /api/auth/login/` con `{username, password}` y `X-CSRFToken` → cookies `access_token` y `refresh_token`) y **solo lee**:
+
+| Ruta | Qué se usa |
+| --- | --- |
+| `/api/inventory/resale-products/` | `purchase_cost` (costo de compra), `sale_price`, `quantity`, `min_quantity`, `is_low`, `unit_code`; lo mismo por variante en `variants[]` |
+| `/api/inventory/product-stock/` | `quantity` por bodega y variante (paginado); se suman las bodegas |
+| `/api/reports/sales-by-product/?date_from=&date_to=` | `quantity_sold`, `total_revenue`, `orders_count` por producto (todas las variantes juntas), últimos 30 días en hora de Colombia |
+
+Emparejamiento con la carta (los id de la carta son los de TRIVO, `producto` o `producto-variante`):
+
+- **directo:** el producto o su variante está en «Compra y reventa»: su costo y sus existencias.
+- **calculado:** los paquetes (x 6, x 24) y las cajas «+ Hielo» son combos sin costo propio. Se busca la lata suelta (`und`) del mismo tamaño cuya marca contiene a la otra («Club Colombia» ↔ «Club Colombia Dorada»; si hay dos, gana el nombre exacto): costo = unidades × costo de la lata (la variante «Caliente» si tiene) + el hielo de 3 kg en las cajas. Las existencias son las latas y para cuántos paquetes alcanzan.
+
+`POST /api/mi-tienda/trivo` (botón «Leer TRIVO», y el monitoreo cada 6 horas) guarda esos costos en `mitienda-costos` (reemplazan los anotados a mano de esos productos; los demás se quedan) y existencias y ventas en `mitienda-trivo`. Así el precio sugerido usa el costo real y no baja del margen mínimo.
+
+**Aplicar precios en TRIVO no está programado** (`PATCH /api/catalog/products/<id>/`): el botón sigue apagado hasta que se apruebe.

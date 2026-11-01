@@ -135,15 +135,16 @@
             </select>
           </label>
         </div>
-        <p class="ayuda">0 % = igualar al más barato; 5 % = hasta 5 % más caro (por el domicilio, por ejemplo); −2 % = 2 % más barato. El margen mínimo solo se usa en los productos con costo anotado.</p>
+        <p class="ayuda">0 % = igualar al más barato; 5 % = hasta 5 % más caro (por el domicilio, por ejemplo); −2 % = 2 % más barato. El margen mínimo solo se usa en los productos con costo (de TRIVO o anotado).</p>
       </fieldset>
       <div id="mt-resumen" class="cat-resumen"></div>
       <div class="cat-acciones">
         <button id="mt-actualizar" class="boton-texto" type="button">Comparar</button>
         <button id="mt-exportar" class="boton-texto" type="button">Exportar CSV</button>
-        <button id="mt-aplicar" class="boton" type="button" disabled title="Necesita las credenciales de TRIVO POS">Aplicar en TRIVO</button>
+        <button id="mt-trivo" class="boton-texto" type="button" hidden>Leer TRIVO</button>
+        <button id="mt-aplicar" class="boton" type="button" disabled title="Todavía no está programado: se hará cuando lo apruebes">Aplicar en TRIVO</button>
       </div>
-      <p class="nota nota-credenciales">«Aplicar en TRIVO», tus costos reales, el inventario y las ventas necesitan acceso a TRIVO POS con credenciales. Mientras tanto, exporta el CSV y cambia los precios en el panel de TRIVO; los costos puedes anotarlos aquí.</p>
+      <p id="mt-trivo-estado" class="nota nota-credenciales">Sin acceso a TRIVO POS: los costos se anotan a mano. Con TRIVO_USUARIO y TRIVO_CLAVE en el servidor salen solos tus costos reales, las existencias y las ventas.</p>
       <div id="mt-estado" class="estado" aria-live="polite"></div>
       <div id="mt-items" class="cat-items"></div>
     </section>

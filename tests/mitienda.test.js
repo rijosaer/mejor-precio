@@ -76,6 +76,7 @@ test('precio sugerido según la regla', () => {
   // Sin mercado: solo se avisa si deja pérdida.
   s = sugerirPrecio({ precio: 1000 }, null, 2000, {});
   assert.deepEqual([s.estado, s.accion, s.sugerido], ['perdida', 'subir', 2300]);
+  assert.equal(s.cambio, 130, 'la vista muestra cuánto sube');
   assert.equal(sugerirPrecio({ precio: 1000 }, null, null, {}).accion, 'mantener');
 });
 
