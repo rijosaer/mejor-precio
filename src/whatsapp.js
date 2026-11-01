@@ -11,6 +11,14 @@
 // Primero se manda un mensaje de texto normal (no se cobra si el dueño escribió
 // al número de la empresa en las últimas 24 horas). Si WhatsApp responde que
 // pasó esa ventana, se manda la plantilla, que sí llega siempre.
+//
+// Sin cuenta de Meta: Green-API (green-api.com) conecta el WhatsApp de la
+// empresa escaneando un QR en su consola, como WhatsApp Web. No hay plantillas
+// ni ventana de 24 horas: siempre se manda texto. Variables:
+//   GREENAPI_ID      idInstance de la instancia
+//   GREENAPI_TOKEN   apiTokenInstance
+//   GREENAPI_URL     apiUrl que muestra la consola (por defecto https://api.green-api.com)
+// Si están las dos cuentas, se usa la de Meta.
 import { actualizar, leer } from './almacen.js';
 
 const VERSION_API = () => process.env.WHATSAPP_API_VERSION || 'v21.0';
@@ -18,7 +26,11 @@ const TIEMPO = 8000;
 const LARGO_TEXTO = 3500; // WhatsApp admite 4096
 const LARGO_VARIABLE = 900; // la variable de una plantilla admite 1024, sin saltos de línea
 
-export const whatsappActivo = () => Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID);
+const metaActivo = () => Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID);
+const greenActivo = () => /^\d{4,20}$/.test(process.env.GREENAPI_ID || '') && /^[\w-]{10,100}$/.test(process.env.GREENAPI_TOKEN || '');
+
+export const proveedorWhatsapp = () => (metaActivo() ? 'meta' : greenActivo() ? 'green-api' : null);
+export const whatsappActivo = () => proveedorWhatsapp() !== null;
 
 // Número en formato internacional sin «+»: «300 466 0472» → «573004660472».
 export function limpiarNumero(v) {
@@ -30,7 +42,7 @@ export function limpiarNumero(v) {
 export async function leerWhatsapp() {
   const doc = (await leer('whatsapp')) || {};
   const numero = limpiarNumero(doc.numero) || limpiarNumero(process.env.WHATSAPP_DESTINO);
-  return { activo: doc.activo !== false, numero, servidor: whatsappActivo(), ultimo: doc.ultimo || null };
+  return { activo: doc.activo !== false, numero, servidor: whatsappActivo(), proveedor: proveedorWhatsapp(), ultimo: doc.ultimo || null };
 }
 
 export async function guardarWhatsapp({ activo, numero } = {}) {
@@ -72,6 +84,21 @@ async function llamarApi(cuerpo) {
   return datos;
 }
 
+async function enviarGreen(destino, texto) {
+  const base = (process.env.GREENAPI_URL || 'https://api.green-api.com').replace(/\/$/, '');
+  if (!/^https:\/\/[\w.-]+$/.test(base)) throw new Error('GREENAPI_URL no es válida');
+  const res = await fetch(`${base}/waInstance${process.env.GREENAPI_ID}/sendMessage/${process.env.GREENAPI_TOKEN}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chatId: `${destino}@c.us`, message: String(texto).slice(0, LARGO_TEXTO) }),
+    signal: AbortSignal.timeout(TIEMPO),
+  });
+  const datos = await res.json().catch(() => ({}));
+  if (res.status === 466) throw new Error('Green-API: se pasó el límite del plan gratis (3 chats al mes)');
+  if (!res.ok || !datos.idMessage) throw new Error(datos?.message || `Green-API: HTTP ${res.status}`);
+  return datos;
+}
+
 // Fuera de la ventana de 24 horas WhatsApp no deja mandar texto libre.
 const fueraDeVentana = (e) => e.codigo === 131047 || e.codigo === 470 || /24 ?hours|re-?engagement/i.test(e.message);
 
@@ -81,6 +108,11 @@ export async function enviarWhatsapp(texto, { numero } = {}) {
   const destino = limpiarNumero(numero) || cfg.numero;
   if (!destino) return { enviado: false, motivo: 'sin-numero' };
   if (!numero && !cfg.activo) return { enviado: false, motivo: 'apagado' };
+  if (proveedorWhatsapp() === 'green-api') {
+    await enviarGreen(destino, texto);
+    await actualizar('whatsapp', (actual) => ({ ...(actual || {}), ultimo: { t: Date.now(), via: 'green-api' } }));
+    return { enviado: true, via: 'green-api' };
+  }
   const comun = { messaging_product: 'whatsapp', recipient_type: 'individual', to: destino };
   let via = 'texto';
   try {

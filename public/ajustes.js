@@ -183,7 +183,7 @@ async function pintarWhatsapp() {
     return;
   }
   if (!wa.servidor) {
-    texto.textContent = 'Todos los avisos (precios, compras por aprobar, existencias bajas, productos bajo el costo, tiendas caídas, resumen semanal) pueden llegar al WhatsApp del dueño desde el número de la empresa. Falta conectar la API de WhatsApp de Meta en el servidor: WHATSAPP_TOKEN y WHATSAPP_PHONE_ID (ver docs/como-funciona.md).';
+    texto.textContent = 'Todos los avisos (precios, compras por aprobar, existencias bajas, productos bajo el costo, tiendas caídas, resumen semanal) pueden llegar al WhatsApp del dueño desde el número de la empresa. Falta conectar WhatsApp en el servidor: con Green-API (escaneando un QR; GREENAPI_ID y GREENAPI_TOKEN) o con la API de Meta (WHATSAPP_TOKEN y WHATSAPP_PHONE_ID). Ver docs/como-funciona.md.';
     return;
   }
   texto.textContent = wa.numero

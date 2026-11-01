@@ -19,6 +19,10 @@ const enviados = [];
 let ventanaAbierta = true;
 globalThis.fetch = async (url, opciones = {}) => {
   const u = String(url);
+  if (u.startsWith('https://api.green-api.com/')) {
+    enviados.push({ url: u, cuerpo: JSON.parse(opciones.body) });
+    return new Response(JSON.stringify({ idMessage: 'BAE5' }));
+  }
   if (!u.startsWith('https://graph.facebook.com/')) return new Response('no', { status: 404 });
   const cuerpo = JSON.parse(opciones.body);
   enviados.push({ url: u, auth: opciones.headers.authorization, cuerpo });
@@ -106,4 +110,27 @@ test('lo que pide atención en TRIVO se avisa una sola vez, al aparecer', () => 
   const avisos = avisosDeAtencion(carta, ahora1, { productos: {} });
   assert.deepEqual(avisos.map((a) => a.tipo), ['bajo-minimo', 'bajo-costo']);
   assert.equal(avisosDeAtencion(carta, ahora1, { productos: ahora1 }).length, 0, 'si ya estaba así, no se repite');
+});
+
+test('sin cuenta de Meta, Green-API manda el texto al chat del dueño', async () => {
+  const meta = { token: process.env.WHATSAPP_TOKEN, id: process.env.WHATSAPP_PHONE_ID };
+  delete process.env.WHATSAPP_TOKEN;
+  delete process.env.WHATSAPP_PHONE_ID;
+  process.env.GREENAPI_ID = '7103123456';
+  process.env.GREENAPI_TOKEN = 'abcdef0123456789abcdef';
+  try {
+    await guardarWhatsapp({ activo: true, numero: '300 466 0472' });
+    assert.equal((await leerWhatsapp()).proveedor, 'green-api');
+    enviados.length = 0;
+    assert.deepEqual(await enviarWhatsapp('Hola\ncon salto'), { enviado: true, via: 'green-api' });
+    assert.equal(enviados[0].url, 'https://api.green-api.com/waInstance7103123456/sendMessage/abcdef0123456789abcdef');
+    assert.deepEqual(enviados[0].cuerpo, { chatId: '573004660472@c.us', message: 'Hola\ncon salto' });
+    process.env.GREENAPI_ID = '../otra-ruta';
+    assert.equal((await leerWhatsapp()).servidor, false, 'un id raro no se usa en la URL');
+  } finally {
+    delete process.env.GREENAPI_ID;
+    delete process.env.GREENAPI_TOKEN;
+    process.env.WHATSAPP_TOKEN = meta.token;
+    process.env.WHATSAPP_PHONE_ID = meta.id;
+  }
 });

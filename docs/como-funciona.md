@@ -346,7 +346,16 @@ Todos los avisos que salen como notificación push salen también por WhatsApp, 
 - **Qué avisa:** bajas de precio, precio objetivo, ofertas, se agota / se agotó / volvió (Mi lista); tiendas que no responden y resumen semanal; compra en TRIVO con precios por aprobar y recordatorio diario si siguen esperando (más de 20 h); producto bajo el mínimo de existencias en TRIVO; precio por debajo del costo; TRIVO que deja de responder o vuelve. Los de TRIVO se avisan una vez, cuando aparecen.
 - **Texto o plantilla:** primero se manda un texto normal (gratis si el dueño escribió al número de la empresa en las últimas 24 horas). Si WhatsApp responde que pasó esa ventana (error 131047), se manda la plantilla aprobada con todo el texto en su variable `{{1}}` (sin saltos de línea; la plantilla sí tiene costo por mensaje según las tarifas de Meta).
 
-### Cómo conectarlo
+### Cómo conectarlo sin cuenta de Meta (Green-API, con QR)
+
+1. Crea una cuenta en [green-api.com](https://green-api.com) y, en la consola, una instancia del plan **Developer** (gratis: hasta 3 chats al mes; aquí se usa uno, el del dueño).
+2. En la instancia, escanea el QR con el WhatsApp de la empresa (WhatsApp → Dispositivos vinculados → Vincular un dispositivo), como en WhatsApp Web.
+3. En el servidor pon `GREENAPI_ID` (*idInstance*) y `GREENAPI_TOKEN` (*apiTokenInstance*); si la consola muestra un *apiUrl* distinto de `https://api.green-api.com`, ponlo en `GREENAPI_URL`. Vuelve a publicar.
+4. En la app, **Ajustes → Notificaciones → WhatsApp del dueño**: escribe el número del dueño y toca «Enviar una prueba».
+
+No hay plantillas ni ventana de 24 horas: siempre se manda texto. Es una conexión tipo WhatsApp Web, no la API oficial: WhatsApp puede bloquear números que la usan de forma rara (con pocos mensajes a un solo número el riesgo es bajo). Si el teléfono de la empresa cierra la sesión vinculada, hay que volver a escanear el QR.
+
+### Cómo conectarlo con la API oficial de Meta
 
 1. En [Meta for Developers](https://developers.facebook.com/) crea una app de tipo **Business** y agrégale **WhatsApp**. Agrega el número de la empresa (si ya usa la app WhatsApp Business, Meta permite conectarlo sin perder la app; si no, el número debe quedar solo para la API).
 2. En **Meta Business Suite → Usuarios del sistema** crea un usuario del sistema con permiso `whatsapp_business_messaging` y genera un **token permanente**.

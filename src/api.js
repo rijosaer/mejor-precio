@@ -242,7 +242,7 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
     }
     if (ruta === '/api/whatsapp/probar' && metodo === 'POST') {
       const wa = await leerWhatsapp();
-      if (!wa.servidor) return json(503, { error: 'Faltan WHATSAPP_TOKEN y WHATSAPP_PHONE_ID en el servidor' });
+      if (!wa.servidor) return json(503, { error: 'Falta conectar WhatsApp en el servidor: GREENAPI_ID y GREENAPI_TOKEN (Green-API) o WHATSAPP_TOKEN y WHATSAPP_PHONE_ID (Meta)' });
       if (!wa.numero) return json(400, { error: 'Escribe primero el número del dueño' });
       try {
         const texto = mensajeWhatsapp([{ tipo: 'prueba', title: 'Así llegan los avisos', body: 'Precios, compras por aprobar, existencias bajas, productos bajo el costo y tiendas caídas.', url: '/' }]);
