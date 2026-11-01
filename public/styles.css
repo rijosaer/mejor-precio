@@ -1278,6 +1278,10 @@ select {
 /* ── Ajustes nuevos ─────────────────────────────────────────────────────── */
 .aj-tiendas { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; }
 .aj-botones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.aj-vinculo { margin: 10px 0 4px; }
+/* El QR siempre sobre blanco, también en el tema oscuro, para que la cámara lo lea. */
+.aj-qr { display: block; width: 220px; max-width: 100%; height: auto; margin: 10px 0 0; padding: 10px; background: #fff; border: 1px solid var(--linea); border-radius: var(--radio); }
+.aj-vinculado { margin: 10px 2px 0; padding: 8px 12px; border-radius: 10px; font-size: 14px; color: var(--ahorro); background: var(--ahorro-fondo); }
 .aj-envios { display: grid; gap: 10px; margin-top: 10px; }
 .aj-envio { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--linea); }
 .aj-envio:first-child { border-top: 0; }

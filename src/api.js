@@ -9,7 +9,7 @@ import { guardarLista, leerLista, novedades, registrarBusqueda, revisarSalud } f
 import { analizarProducto, aplicarPropuesta, descartarPropuesta, deshacerCambio, estadoMiTienda, guardarCostos, guardarMargenes, proponerTodos, sincronizarTrivo } from './mitienda.js';
 import { borrarProveedor, guardarProveedor, leerProveedores } from './proveedores.js';
 import { clavePublica, desuscribir, enviar, mensajeWhatsapp, pushActivo, suscribir, suscripciones } from './push.js';
-import { enviarWhatsapp, guardarWhatsapp, leerWhatsapp } from './whatsapp.js';
+import { desvincularGreen, enviarWhatsapp, guardarWhatsapp, leerWhatsapp, vinculoGreen } from './whatsapp.js';
 
 const DIAS_SESION = 30;
 const MAX_INTENTOS = 10;
@@ -239,6 +239,19 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
     if (ruta === '/api/whatsapp' && metodo === 'GET') return json(200, await leerWhatsapp());
     if (ruta === '/api/whatsapp' && metodo === 'PUT') {
       return validar(async () => json(200, await guardarWhatsapp(await leerJson(request))));
+    }
+    // Vincular el WhatsApp de la empresa escaneando el QR de Green-API desde Ajustes.
+    for (const [camino, verbo, accion] of [['/api/whatsapp/vinculo', 'GET', vinculoGreen], ['/api/whatsapp/desvincular', 'POST', desvincularGreen]]) {
+      if (ruta !== camino || metodo !== verbo) continue;
+      return validar(async () => {
+        try {
+          return json(200, await accion());
+        } catch (error) {
+          if (error instanceof TypeError && !/fetch failed/.test(error.message)) throw error;
+          console.error('[whatsapp]', error.message);
+          return json(502, { error: error.message });
+        }
+      });
     }
     if (ruta === '/api/whatsapp/probar' && metodo === 'POST') {
       const wa = await leerWhatsapp();

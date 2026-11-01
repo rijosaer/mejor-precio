@@ -170,6 +170,59 @@ async function pintarPush() {
 }
 
 // ── WhatsApp del dueño (desde el número de la empresa) ─────────────────────
+const ESTADOS_GREEN = {
+  starting: 'Green-API está encendiendo la conexión; espera un momento.',
+  sleepMode: 'El teléfono de la empresa no responde: ábrele WhatsApp y revisa que tenga internet.',
+  blocked: 'WhatsApp bloqueó este número. Hay que vincular otro.',
+  yellowCard: 'WhatsApp limitó por un tiempo los envíos desde este número.',
+};
+const VUELTAS_QR = 100; // 5 minutos preguntando cada 3 s
+let sondeoQr = null;
+
+// Con Green-API el WhatsApp de la empresa se vincula aquí mismo: se muestra el
+// QR (Green-API lo renueva cada 20 s) hasta que se escanea. La sesión la guarda Green-API.
+function pintarVinculo(caja) {
+  clearTimeout(sondeoQr);
+  const zona = el('div', 'aj-vinculo');
+  caja.append(zona);
+  const pedir = async (vuelta = 0) => {
+    let v;
+    try {
+      v = await api('/api/whatsapp/vinculo');
+    } catch (error) {
+      zona.replaceChildren(el('p', 'ayuda', `No se pudo consultar Green-API: ${error.message}`), boton('Reintentar', 'boton-texto', () => pedir()));
+      return;
+    }
+    if (!zona.isConnected) return;
+    if (v.estado === 'authorized') {
+      zona.replaceChildren(
+        el('p', 'aj-vinculado', '✓ WhatsApp de la empresa vinculado (la sesión queda guardada en Green-API).'),
+        boton('Desvincular', 'boton-texto', async (e) => {
+          if (!confirm('¿Desvincular el WhatsApp de la empresa? Los avisos no salen hasta que vuelvas a escanear el QR.')) return;
+          e.target.disabled = true;
+          await api('/api/whatsapp/desvincular', { method: 'POST', cuerpo: {} }).catch(() => {});
+          pedir();
+        }),
+      );
+      return;
+    }
+    if (v.qr) {
+      const qr = el('img', 'aj-qr');
+      qr.src = v.qr;
+      qr.alt = 'QR para vincular el WhatsApp de la empresa';
+      qr.width = 220;
+      qr.height = 220;
+      zona.replaceChildren(el('p', 'ayuda', 'Escanea este QR con el WhatsApp de la empresa: WhatsApp → Dispositivos vinculados → Vincular un dispositivo. Se renueva solo.'), qr);
+    } else {
+      zona.replaceChildren(el('p', 'ayuda', ESTADOS_GREEN[v.estado] || `Estado en Green-API: ${v.estado}${v.mensaje ? ` (${v.mensaje})` : ''}`));
+    }
+    // Se sigue preguntando mientras Ajustes esté abierto, hasta que quede vinculado.
+    if (vuelta < VUELTAS_QR && !$('#vista-ajustes').hidden) sondeoQr = setTimeout(() => pedir(vuelta + 1), 3000);
+    else zona.append(boton('Mostrar el QR otra vez', 'boton-texto', () => pedir()));
+  };
+  pedir();
+}
+
 async function pintarWhatsapp() {
   const caja = $('#aj-whatsapp');
   caja.replaceChildren();
@@ -186,6 +239,7 @@ async function pintarWhatsapp() {
     texto.textContent = 'Todos los avisos (precios, compras por aprobar, existencias bajas, productos bajo el costo, tiendas caídas, resumen semanal) pueden llegar al WhatsApp del dueño desde el número de la empresa. Falta conectar WhatsApp en el servidor: con Green-API (escaneando un QR; GREENAPI_ID y GREENAPI_TOKEN) o con la API de Meta (WHATSAPP_TOKEN y WHATSAPP_PHONE_ID). Ver docs/como-funciona.md.';
     return;
   }
+  if (wa.proveedor === 'green-api') pintarVinculo(caja);
   texto.textContent = wa.numero
     ? `${wa.activo ? 'Los avisos llegan' : 'Apagado: los avisos no llegan'} al WhatsApp +${wa.numero}.${wa.ultimo ? ` Último mensaje ${new Date(wa.ultimo.t).toLocaleString('es-CO')}.` : ''}`
     : 'Escribe el WhatsApp personal del dueño: ahí llegan todos los avisos que piden atención, en un solo mensaje por revisión y respetando el horario de silencio.';

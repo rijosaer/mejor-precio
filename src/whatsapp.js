@@ -84,10 +84,39 @@ async function llamarApi(cuerpo) {
   return datos;
 }
 
-async function enviarGreen(destino, texto) {
+function urlGreen(metodo) {
   const base = (process.env.GREENAPI_URL || 'https://api.green-api.com').replace(/\/$/, '');
   if (!/^https:\/\/[\w.-]+$/.test(base)) throw new Error('GREENAPI_URL no es válida');
-  const res = await fetch(`${base}/waInstance${process.env.GREENAPI_ID}/sendMessage/${process.env.GREENAPI_TOKEN}`, {
+  return `${base}/waInstance${process.env.GREENAPI_ID}/${metodo}/${process.env.GREENAPI_TOKEN}`;
+}
+
+async function leerGreen(metodo) {
+  const res = await fetch(urlGreen(metodo), { signal: AbortSignal.timeout(TIEMPO) });
+  if (!res.ok) throw new Error(`Green-API: HTTP ${res.status}`);
+  return res.json();
+}
+
+// Vincular desde la app: el estado del WhatsApp de la empresa en Green-API y,
+// si falta escanearlo, el QR (Green-API lo cambia cada 20 s; la sesión la guarda Green-API).
+export async function vinculoGreen() {
+  if (proveedorWhatsapp() !== 'green-api') throw new TypeError('WhatsApp no está conectado con Green-API');
+  const { stateInstance } = await leerGreen('getStateInstance');
+  if (stateInstance !== 'notAuthorized') return { estado: stateInstance || 'desconocido', qr: null };
+  const qr = await leerGreen('qr');
+  if (qr.type === 'qrCode' && /^[A-Za-z0-9+/=]+$/.test(qr.message || '')) return { estado: 'qr', qr: `data:image/png;base64,${qr.message}` };
+  if (qr.type === 'alreadyLogged') return { estado: 'authorized', qr: null };
+  return { estado: 'notAuthorized', qr: null, mensaje: qr.message || '' };
+}
+
+// Desvincula el WhatsApp de la empresa (para escanear con otro teléfono).
+export async function desvincularGreen() {
+  if (proveedorWhatsapp() !== 'green-api') throw new TypeError('WhatsApp no está conectado con Green-API');
+  await leerGreen('logout');
+  return vinculoGreen();
+}
+
+async function enviarGreen(destino, texto) {
+  const res = await fetch(urlGreen('sendMessage'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ chatId: `${destino}@c.us`, message: String(texto).slice(0, LARGO_TEXTO) }),

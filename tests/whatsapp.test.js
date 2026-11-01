@@ -17,9 +17,16 @@ test.after(() => rm(carpeta, { recursive: true, force: true }));
 
 const enviados = [];
 let ventanaAbierta = true;
+let greenVinculado = false;
 globalThis.fetch = async (url, opciones = {}) => {
   const u = String(url);
   if (u.startsWith('https://api.green-api.com/')) {
+    if (u.includes('/getStateInstance/')) return new Response(JSON.stringify({ stateInstance: greenVinculado ? 'authorized' : 'notAuthorized' }));
+    if (u.includes('/qr/')) return new Response(JSON.stringify(greenVinculado ? { type: 'alreadyLogged', message: 'instance account already authorized' } : { type: 'qrCode', message: 'iVBORw0KGgo=' }));
+    if (u.includes('/logout/')) {
+      greenVinculado = false;
+      return new Response(JSON.stringify({ isLogout: true }));
+    }
     enviados.push({ url: u, cuerpo: JSON.parse(opciones.body) });
     return new Response(JSON.stringify({ idMessage: 'BAE5' }));
   }
@@ -32,7 +39,7 @@ globalThis.fetch = async (url, opciones = {}) => {
   return new Response(JSON.stringify({ messages: [{ id: 'wamid.1' }] }));
 };
 
-const { limpiarNumero, textoParaPlantilla, enviarWhatsapp, guardarWhatsapp, leerWhatsapp } = await import('../src/whatsapp.js');
+const { limpiarNumero, textoParaPlantilla, enviarWhatsapp, guardarWhatsapp, leerWhatsapp, vinculoGreen, desvincularGreen } = await import('../src/whatsapp.js');
 const { notificarAvisos, mensajeWhatsapp } = await import('../src/push.js');
 const { avisosDeAtencion } = await import('../src/mitienda.js');
 const MEDIODIA = Date.parse('2026-11-02T17:00:00Z'); // 12:00 en Colombia, fuera del silencio
@@ -125,6 +132,12 @@ test('sin cuenta de Meta, Green-API manda el texto al chat del dueño', async ()
     assert.deepEqual(await enviarWhatsapp('Hola\ncon salto'), { enviado: true, via: 'green-api' });
     assert.equal(enviados[0].url, 'https://api.green-api.com/waInstance7103123456/sendMessage/abcdef0123456789abcdef');
     assert.deepEqual(enviados[0].cuerpo, { chatId: '573004660472@c.us', message: 'Hola\ncon salto' });
+    // Vincular desde Ajustes: QR mientras falta escanear; vinculado después; desvincular.
+    greenVinculado = false;
+    assert.deepEqual(await vinculoGreen(), { estado: 'qr', qr: 'data:image/png;base64,iVBORw0KGgo=' });
+    greenVinculado = true;
+    assert.deepEqual(await vinculoGreen(), { estado: 'authorized', qr: null });
+    assert.equal((await desvincularGreen()).estado, 'qr');
     process.env.GREENAPI_ID = '../otra-ruta';
     assert.equal((await leerWhatsapp()).servidor, false, 'un id raro no se usa en la URL');
   } finally {

@@ -349,9 +349,11 @@ Todos los avisos que salen como notificación push salen también por WhatsApp, 
 ### Cómo conectarlo sin cuenta de Meta (Green-API, con QR)
 
 1. Crea una cuenta en [green-api.com](https://green-api.com) y, en la consola, una instancia del plan **Developer** (gratis: hasta 3 chats al mes; aquí se usa uno, el del dueño).
-2. En la instancia, escanea el QR con el WhatsApp de la empresa (WhatsApp → Dispositivos vinculados → Vincular un dispositivo), como en WhatsApp Web.
-3. En el servidor pon `GREENAPI_ID` (*idInstance*) y `GREENAPI_TOKEN` (*apiTokenInstance*); si la consola muestra un *apiUrl* distinto de `https://api.green-api.com`, ponlo en `GREENAPI_URL`. Vuelve a publicar.
-4. En la app, **Ajustes → Notificaciones → WhatsApp del dueño**: escribe el número del dueño y toca «Enviar una prueba».
+2. En el servidor pon `GREENAPI_ID` (*idInstance*) y `GREENAPI_TOKEN` (*apiTokenInstance*); si la consola muestra un *apiUrl* distinto de `https://api.green-api.com`, ponlo en `GREENAPI_URL`. Vuelve a publicar.
+3. En la app, **Ajustes → Notificaciones → WhatsApp del dueño** aparece el QR (se renueva solo cada 20 s): escanéalo con el WhatsApp de la empresa (WhatsApp → Dispositivos vinculados → Vincular un dispositivo), como en WhatsApp Web. Al vincularse cambia a «WhatsApp de la empresa vinculado»; la sesión la guarda Green-API. Desde ahí también se puede desvincular. (El QR también se puede escanear en la consola de Green-API.)
+4. Escribe el número del dueño y toca «Enviar una prueba».
+
+Rutas: `GET /api/whatsapp/vinculo` (estado y QR), `POST /api/whatsapp/desvincular`.
 
 No hay plantillas ni ventana de 24 horas: siempre se manda texto. Es una conexión tipo WhatsApp Web, no la API oficial: WhatsApp puede bloquear números que la usan de forma rara (con pocos mensajes a un solo número el riesgo es bajo). Si el teléfono de la empresa cierra la sesión vinculada, hay que volver a escanear el QR.
 
