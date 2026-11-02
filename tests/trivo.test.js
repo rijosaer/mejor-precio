@@ -57,9 +57,14 @@ const respuesta = (cuerpo, { estado = 200, cookies = [] } = {}) => {
   for (const c of cookies) h.append('set-cookie', c);
   return new Response(JSON.stringify(cuerpo), { status: estado, headers: h });
 };
+const whatsapps = []; // mensajes que salen por Green-API
 globalThis.fetch = async (url, opciones = {}) => {
   const u = new URL(String(url));
   const metodo = opciones.method || 'GET';
+  if (u.hostname === 'api.green-api.com') {
+    whatsapps.push(JSON.parse(opciones.body));
+    return respuesta({ idMessage: 'BAE5' });
+  }
   llamadas.push({ metodo, ruta: u.pathname, query: u.search, headers: opciones.headers || {}, body: opciones.body });
   if (u.pathname.startsWith('/api/public/')) return new Response(carta);
   if (u.pathname === '/api/auth/csrf/') return respuesta({}, { cookies: ['csrftoken=tok123; Path=/'] });
@@ -266,4 +271,48 @@ test('si la sesión vence justo antes del cambio, vuelve a entrar y lo reintenta
   assert.equal(PRECIOS[3], 86000);
   const orden = llamadas.filter((l) => l.metodo !== 'GET' || l.ruta === '/api/auth/csrf/').map((l) => `${l.metodo} ${l.ruta}`);
   assert.deepEqual(orden, ['PATCH /api/catalog/products/3/', 'GET /api/auth/csrf/', 'POST /api/auth/login/', 'PATCH /api/catalog/products/3/']);
+});
+
+test('responder «1» al WhatsApp pone ese precio en TRIVO; «no 2» lo descarta', async () => {
+  process.env.GREENAPI_ID = '7103123456';
+  process.env.GREENAPI_TOKEN = 'abcdef0123456789abcdef';
+  const { guardarWhatsapp } = await import('../src/whatsapp.js');
+  const { ejecutarOrden, procesarEntrante } = await import('../src/respuestas.js');
+  try {
+    await guardarWhatsapp({ activo: true, numero: '3004660472' });
+    Object.assign(PRECIOS, { 1: 3500, 2: 72000, 3: 85000 });
+    await proponerTodos();
+    const lista = await ejecutarOrden({ accion: 'precios' });
+    assert.match(lista, /^💲 \*Precios por aprobar\*\n\*1\.\* /);
+    const ids = (await estadoMiTienda()).propuestas.map((x) => x.id);
+    const primera = (await estadoMiTienda()).propuestas[0];
+    const ahora = Date.now();
+    const mensaje = (texto) => ({
+      typeWebhook: 'incomingMessageReceived',
+      instanceData: { idInstance: 7103123456 },
+      timestamp: Math.floor(ahora / 1000),
+      idMessage: `M-${texto}`,
+      senderData: { chatId: '573004660472@c.us' },
+      messageData: { typeMessage: 'quotedMessage', extendedTextMessageData: { text: texto } },
+    });
+    llamadas.length = 0;
+    whatsapps.length = 0;
+    const r = await procesarEntrante(mensaje('1'), { ahora });
+    assert.equal(r.orden, 'aplicar');
+    assert.equal(llamadas.filter((l) => l.metodo === 'PATCH').length, 1, 'un solo cambio en TRIVO');
+    assert.match(whatsapps[0].message, new RegExp(`✅ ${primera.nombre.replace(/[()+]/g, '.')}: \\$\\s[\\d.]+ → \\*\\$\\s[\\d.]+\\*`));
+    const estado = await estadoMiTienda();
+    assert.ok(!estado.propuestas.some((x) => x.id === primera.id));
+    assert.deepEqual([estado.historial[0].producto, estado.historial[0].via], [primera.id, 'whatsapp']);
+    // El mismo número otra vez: ya no está.
+    assert.match((await procesarEntrante(mensaje('1 '), { ahora })).respuesta, /ya se aplicó o se descartó/);
+    const segunda = ids[1];
+    await procesarEntrante(mensaje('no 2'), { ahora });
+    assert.ok(!(await estadoMiTienda()).propuestas.some((x) => x.id === segunda), 'descartada');
+    assert.equal(llamadas.filter((l) => l.metodo === 'PATCH').length, 1, 'descartar no toca TRIVO');
+    assert.match((await procesarEntrante(mensaje('9'), { ahora })).respuesta, /9: no hay un precio con ese número/);
+  } finally {
+    delete process.env.GREENAPI_ID;
+    delete process.env.GREENAPI_TOKEN;
+  }
 });

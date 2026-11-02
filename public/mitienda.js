@@ -234,7 +234,9 @@ const textoMotivo = (x) =>
     ? `Compra${x.compra?.fecha ? ` del ${new Date(x.compra.fecha).toLocaleDateString('es-CO')}` : ''}${x.compra?.costo ? ` a ${pesos.format(x.compra.costo)} c/u` : ''}`
     : x.motivo === 'costo'
       ? 'Cambió el costo en TRIVO'
-      : 'Calculado con tu margen';
+      : x.motivo === 'bajo-costo'
+        ? 'Lo vendes por debajo del costo'
+        : 'Calculado con tu margen';
 
 async function accionPrecio(ruta, cuerpo, metodo = 'POST') {
   const datos = await api(ruta, { method: metodo, cuerpo });
@@ -325,7 +327,7 @@ function pintarPropuestas() {
   h.replaceChildren();
   for (const c of historial) {
     const fila = el('div', 'mt-cambio');
-    const texto = el('span', 'ayuda', `${c.nombre}: ${pesos.format(c.antes)} → ${pesos.format(c.despues)} · ${c.motivo === 'deshacer' ? 'deshecho' : `margen ${c.margen} %`} · ${hace(c.t)}`);
+    const texto = el('span', 'ayuda', `${c.nombre}: ${pesos.format(c.antes)} → ${pesos.format(c.despues)} · ${c.motivo === 'deshacer' ? 'deshecho' : `margen ${c.margen} %`}${c.via === 'whatsapp' ? ' · desde WhatsApp' : ''} · ${hace(c.t)}`);
     fila.append(texto);
     if (!c.deshecho && c.motivo !== 'deshacer') {
       fila.append(

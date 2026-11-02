@@ -101,6 +101,7 @@ export async function registrar(item, datos, { ahora = Date.now(), notificar = t
     // todas las palabras de la búsqueda, tamaño incluido (la búsqueda general
     // tolera que falte una palabra de categoría).
     const esExacto = exactoPara(item.q);
+    const propios = preciosPropios(datos, esExacto);
     let exactos = 0;
     let masBarato = null;
     for (const t of datos.tiendas) {
@@ -123,7 +124,9 @@ export async function registrar(item, datos, { ahora = Date.now(), notificar = t
           ean: p.ean ?? null,
         });
         const antes = puntoDulce(meta.puntos, p.precio, ahora);
-        const aviso = { ...base, clave, nombre: p.nombre, tienda: t.nombre, precio: p.precio };
+        // Por unidad y frente a lo que tú cobras por la misma unidad (para el WhatsApp).
+        const tuUnidad = !t.miTienda && p.ml ? propios.get(p.ml) ?? null : null;
+        const aviso = { ...base, clave, nombre: p.nombre, tienda: t.nombre, precio: p.precio, unidades: p.unidades ?? 1, tuUnidad };
         if (antes) avisos.push({ ...aviso, tipo: 'dulce', antes });
         const x = punto(p, ahora);
         if (i < VIGILADOS) {
@@ -144,6 +147,20 @@ export async function registrar(item, datos, { ahora = Date.now(), notificar = t
   return avisos;
 }
 
+// Lo que cobra la tienda propia por unidad, por tamaño (ml), en esta búsqueda.
+function preciosPropios(datos, esExacto) {
+  const propios = new Map();
+  for (const t of datos.tiendas) {
+    if (!t.ok || !t.miTienda) continue;
+    for (const p of t.productos) {
+      if (!(p.precio > 0) || !p.ml || !esExacto(p)) continue;
+      const unidad = Math.round(p.precio / (p.unidades || 1));
+      if (!(propios.get(p.ml) <= unidad)) propios.set(p.ml, unidad);
+    }
+  }
+  return propios;
+}
+
 function olvidarViejos(doc, ahora) {
   for (const [clave, meta] of Object.entries(doc.productos)) {
     const ultimo = meta.puntos[meta.puntos.length - 1];
@@ -159,7 +176,7 @@ function avisosDeLista(item, doc, datos, masBarato, exactos, base) {
   const clave = `lista|${item.id}`;
   if (item.umbral > 0 && masBarato && masBarato.precio <= item.umbral) {
     if (!(avisado.umbral <= masBarato.precio)) {
-      avisos.push({ ...base, tipo: 'umbral', clave, nombre: masBarato.nombre, tienda: masBarato.tienda, precio: masBarato.precio, umbral: item.umbral });
+      avisos.push({ ...base, tipo: 'umbral', clave, nombre: masBarato.nombre, tienda: masBarato.tienda, precio: masBarato.precio, unidades: masBarato.unidades ?? 1, umbral: item.umbral });
       avisado.umbral = masBarato.precio;
     }
   } else delete avisado.umbral;

@@ -9,6 +9,29 @@ import { $, boton, el, guardado } from './util.js';
 
 export const VERSIONES = [
   {
+    version: '2.6',
+    fecha: '2026-11-02',
+    titulo: 'Hoy, y los precios se aprueban desde WhatsApp',
+    cambios: [
+      {
+        titulo: 'Pantalla «Hoy»',
+        antes: 'Al abrir la app solo estaba el buscador; lo que pedía atención estaba repartido en Mi tienda, Mi lista y Estado.',
+        ahora: 'Arriba del buscador está lo de hoy: cuánta plata se pierde al mes por precios bajo el costo, los precios por aprobar, lo que hay que pedir, el inventario en negativo y las ofertas de los últimos dos días, cada cosa con su botón. Abajo, «Avisos enviados»: qué se avisó, cuándo, por dónde y qué se hizo con cada precio.',
+      },
+      {
+        titulo: 'Aprobar respondiendo el WhatsApp',
+        antes: 'El aviso decía el precio con tu margen, pero para cambiarlo había que abrir la app.',
+        ahora: 'Cada precio por aprobar (y cada producto bajo el costo) llega con un número: responde «1», «1 3» o «todos» y se pone en TRIVO; «no 2» lo descarta y «precios» los lista. Queda en el historial de Mi tienda y se puede deshacer. Se activa en Ajustes → Notificaciones.',
+        donde: 'ajustes',
+      },
+      {
+        titulo: 'Avisos más útiles y sin repetir',
+        antes: 'Un mismo aviso podía repetirse, de noche todo esperaba a la mañana y si WhatsApp fallaba los avisos se perdían.',
+        ahora: 'El mismo aviso no se repite en 24 horas. De noche solo sale lo urgente (vender bajo el costo) y lo demás llega al terminar el horario de silencio, como «lo de la noche». Si WhatsApp falla, el error se ve en la app y los avisos se reintentan. Nuevo aviso de inventario en negativo en TRIVO, y las ofertas dicen el precio por unidad y a cuánto la vendes tú.',
+      },
+    ],
+  },
+  {
     version: '2.5',
     fecha: '2026-11-01',
     titulo: 'Avisos por WhatsApp al dueño',

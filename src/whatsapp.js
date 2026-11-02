@@ -19,6 +19,7 @@
 //   GREENAPI_TOKEN   apiTokenInstance
 //   GREENAPI_URL     apiUrl que muestra la consola (por defecto https://api.green-api.com)
 // Si están las dos cuentas, se usa la de Meta.
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { actualizar, leer } from './almacen.js';
 
 const VERSION_API = () => process.env.WHATSAPP_API_VERSION || 'v21.0';
@@ -42,7 +43,7 @@ export function limpiarNumero(v) {
 export async function leerWhatsapp() {
   const doc = (await leer('whatsapp')) || {};
   const numero = limpiarNumero(doc.numero) || limpiarNumero(process.env.WHATSAPP_DESTINO);
-  return { activo: doc.activo !== false, numero, servidor: whatsappActivo(), proveedor: proveedorWhatsapp(), ultimo: doc.ultimo || null };
+  return { activo: doc.activo !== false, numero, servidor: whatsappActivo(), proveedor: proveedorWhatsapp(), ultimo: doc.ultimo || null, error: doc.error || null };
 }
 
 export async function guardarWhatsapp({ activo, numero } = {}) {
@@ -131,7 +132,19 @@ async function enviarGreen(destino, texto) {
 // Fuera de la ventana de 24 horas WhatsApp no deja mandar texto libre.
 const fueraDeVentana = (e) => e.codigo === 131047 || e.codigo === 470 || /24 ?hours|re-?engagement/i.test(e.message);
 
-export async function enviarWhatsapp(texto, { numero } = {}) {
+// El último error de envío queda guardado (se ve en la app) hasta el próximo envío bueno.
+export async function enviarWhatsapp(texto, opciones = {}) {
+  try {
+    const r = await enviarSinRegistro(texto, opciones);
+    if (r.enviado) await actualizar('whatsapp', (actual) => ({ ...(actual || {}), ultimo: { t: Date.now(), via: r.via }, error: null }));
+    return r;
+  } catch (error) {
+    await actualizar('whatsapp', (actual) => ({ ...(actual || {}), error: { t: Date.now(), mensaje: error.message } })).catch(() => {});
+    throw error;
+  }
+}
+
+async function enviarSinRegistro(texto, { numero } = {}) {
   if (!whatsappActivo()) return { enviado: false, motivo: 'sin-configurar' };
   const cfg = await leerWhatsapp();
   const destino = limpiarNumero(numero) || cfg.numero;
@@ -139,7 +152,6 @@ export async function enviarWhatsapp(texto, { numero } = {}) {
   if (!numero && !cfg.activo) return { enviado: false, motivo: 'apagado' };
   if (proveedorWhatsapp() === 'green-api') {
     await enviarGreen(destino, texto);
-    await actualizar('whatsapp', (actual) => ({ ...(actual || {}), ultimo: { t: Date.now(), via: 'green-api' } }));
     return { enviado: true, via: 'green-api' };
   }
   const comun = { messaging_product: 'whatsapp', recipient_type: 'individual', to: destino };
@@ -159,6 +171,48 @@ export async function enviarWhatsapp(texto, { numero } = {}) {
       },
     });
   }
-  await actualizar('whatsapp', (actual) => ({ ...(actual || {}), ultimo: { t: Date.now(), via } }));
   return { enviado: true, via };
+}
+
+// ── Respuestas del dueño (Green-API) ────────────────────────────────────────
+// Green-API avisa cada mensaje que llega al WhatsApp de la empresa a
+// /api/whatsapp/entrante con «Authorization: Bearer <token>». El token sale del
+// apiTokenInstance (no hace falta otra variable) y no sirve para otra cosa.
+export const tokenWebhook = () => createHmac('sha256', process.env.GREENAPI_TOKEN || '').update('mejor-precio|webhook').digest('base64url').slice(0, 40);
+
+export function webhookAutorizado(request) {
+  if (proveedorWhatsapp() !== 'green-api') return false;
+  const esperado = Buffer.from(`Bearer ${tokenWebhook()}`);
+  const recibido = Buffer.from(request.headers.get('authorization') || '');
+  return esperado.length === recibido.length && timingSafeEqual(esperado, recibido);
+}
+
+const urlWebhook = (base) => `${String(base).replace(/\/$/, '')}/api/whatsapp/entrante`;
+
+// ¿Green-API ya manda las respuestas a esta app?
+export async function estadoRespuestas(base) {
+  if (proveedorWhatsapp() !== 'green-api') return { disponible: false, activo: false };
+  const s = await leerGreen('getSettings');
+  return { disponible: true, activo: s.webhookUrl === urlWebhook(base) && s.incomingWebhook === 'yes' };
+}
+
+// Solo se tocan el webhook y los mensajes entrantes; el resto de la
+// configuración de la instancia queda igual. Green-API tarda hasta 5 minutos en aplicarlo.
+export async function activarRespuestas(base) {
+  if (proveedorWhatsapp() !== 'green-api') throw new TypeError('Responder desde WhatsApp necesita Green-API');
+  if (!/^https:\/\/[\w.-]+(:\d+)?\/?$/.test(String(base))) throw new TypeError('La app debe estar publicada con https para recibir respuestas');
+  const res = await fetch(urlGreen('setSettings'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ webhookUrl: urlWebhook(base), webhookUrlToken: `Bearer ${tokenWebhook()}`, incomingWebhook: 'yes' }),
+    signal: AbortSignal.timeout(TIEMPO),
+  });
+  const datos = await res.json().catch(() => ({}));
+  if (!res.ok || !datos.saveSettings) throw new Error(datos?.message || `Green-API: HTTP ${res.status}`);
+  return { disponible: true, activo: true };
+}
+
+// El texto de un mensaje entrante (normal, con vista previa o respondiendo a otro).
+export function textoEntrante(m) {
+  return String(m?.textMessageData?.textMessage ?? m?.extendedTextMessageData?.text ?? '').trim();
 }

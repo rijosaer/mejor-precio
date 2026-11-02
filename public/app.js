@@ -5,6 +5,7 @@ import { abrirCatalogo, configurarCatalogo } from './catalogo.js';
 import { ajustes, fusionarServidor, registrar } from './datos.js';
 import { configurarEscaner } from './escaner.js';
 import { abrirEstado, configurarEstado } from './estado.js';
+import { cargarHoy, mostrarHoy } from './hoy.js';
 import { abrirLista, analizarLista, configurarLista, propuestaVieja } from './lista.js';
 import { LISTAS } from './listas-sugeridas.js';
 import { abrirMiTienda, configurarMiTienda } from './mitienda.js';
@@ -42,6 +43,7 @@ function mostrar(vista) {
 function volver() {
   mostrar('buscar');
   refrescar();
+  cargarHoy();
 }
 
 // Enlaces de los avisos (WhatsApp y push): «/#mitienda», «/#lista»… abren esa vista.
@@ -83,6 +85,7 @@ function pintarRecientes() {
   const caja = $('#recientes');
   caja.replaceChildren();
   $('#rapidas').hidden = Boolean(ultimo);
+  mostrarHoy();
   if (ultimo) return;
   for (const q of guardado('mp-recientes') || []) {
     const b = el('button', '', q);
@@ -148,7 +151,7 @@ async function buscar(q) {
   }
 }
 
-Object.assign(acciones, { buscar, mostrar, volver, agregarAlPedido, aplicarApariencia });
+Object.assign(acciones, { buscar, mostrar, volver, agregarAlPedido, aplicarApariencia, abrirAjustes });
 
 // ── Eventos ────────────────────────────────────────────────────────────────
 $('#form-buscar').addEventListener('submit', (e) => {
@@ -221,6 +224,7 @@ async function iniciar() {
   mostrar('buscar');
   pintarRecientes();
   pintarSugerencias();
+  cargarHoy();
   // Primera vez en el dispositivo: tutorial; después (o si ya lo vio), las
   // novedades de la versión que este dispositivo todavía no ha visto.
   iniciarTutorial(() => iniciarNovedades((vista) => (vista === 'ajustes' ? abrirAjustes() : mostrar(vista))));

@@ -1453,3 +1453,36 @@ textarea:focus { border-color: var(--tinta); outline: none; }
 .mt-cambio { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--linea); }
 #mt-historial-caja { margin-top: 10px; }
 .aj-subtitulo { margin: 16px 0 4px; font-size: 0.95rem; }
+
+/* ── Hoy (inicio) ───────────────────────────────────────────────────────── */
+.hoy { margin-top: 18px; }
+.hoy-cabeza { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.hoy-cabeza h2 { margin: 0; font-size: 19px; letter-spacing: -0.02em; }
+.hoy-cabeza .ayuda { margin: 0; }
+.hoy-rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); align-items: start; gap: 10px; margin-top: 10px; }
+.hoy-bloque { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px 16px; background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); box-shadow: var(--sombra); }
+.hoy-bloque h3 { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
+.hoy-bloque .ayuda { margin: 2px 0 0; }
+.hoy-bloque > div { width: 100%; }
+.hoy-bloque .boton-texto { margin-top: 8px; }
+.hoy-bloque.mal { background: var(--perdida-fondo); border-color: var(--perdida-borde); }
+.hoy-bloque.mal h3 { color: var(--perdida); }
+.hoy-bloque.aviso { background: var(--aviso-fondo); border-color: var(--aviso-borde); }
+.hoy-bloque.aviso h3 { color: var(--aviso); }
+.hoy-bloque.bien h3 { color: var(--ahorro); }
+.hoy-lista { margin: 6px 0 0; padding: 0 0 0 18px; font-size: 13.5px; color: var(--tinta-media); }
+.hoy-lista li { margin: 2px 0; overflow-wrap: anywhere; }
+.hoy-mas { list-style: none; margin-left: -18px; color: var(--tinta-suave); }
+.hoy-enlace { display: inline; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; text-decoration: underline; text-decoration-color: var(--linea-fuerte); text-underline-offset: 3px; cursor: pointer; }
+.hoy-enlace:hover { color: var(--tinta); text-decoration-color: currentColor; }
+.hoy-orden { margin: 8px 2px 0; padding: 10px 14px; border-radius: 12px; font-size: 14px; color: var(--ahorro); background: var(--ahorro-fondo); }
+.hoy-historial { margin-top: 12px; font-size: 13.5px; }
+.hoy-historial summary { cursor: pointer; font-weight: 600; color: var(--tinta-media); padding: 4px 2px; }
+.hoy-envio { padding: 10px 2px; border-top: 1px solid var(--linea); }
+.hoy-envio-cabeza { margin: 0; color: var(--tinta-suave); }
+.hoy-envio-cabeza b { color: var(--tinta); }
+.hoy-respuesta { margin: 6px 0 0; white-space: pre-line; color: var(--tinta-media); }
+.hoy-estado { display: inline-block; padding: 0 7px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--linea); color: var(--tinta-suave); }
+.hoy-estado.aplicado { color: var(--ahorro); border-color: var(--ahorro-borde); }
+.hoy-estado.pendiente { color: var(--aviso); border-color: var(--aviso-borde); }
+.aj-respuestas { margin: 8px 2px 0; font-size: 13.5px; }

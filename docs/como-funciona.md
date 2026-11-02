@@ -195,7 +195,7 @@ Al recargar verás el chip de la fila y la gráfica. Si vuelves a buscar, se gen
 
 La lista se guarda en el servidor (`PUT /api/lista`). La función programada corre cada hora y revisa hasta 6 productos que lleven 6 horas o más sin revisarse (de 3 en 3; la función tiene 30 s). Una búsqueda manual de un producto de la lista cuenta como revisión. Por cada producto se guardan hasta 12 resultados por tienda, con un punto cada 3 horas como máximo: `t` fecha, `p` precio, `d` disponible y, si la tienda los da, `s` stock, `a` precio tachado y `n` nota de la oferta. Al abrir la app, `GET /api/monitoreo?desde=<última sincronización>` trae los puntos y avisos nuevos y `fusionarServidor` los suma al historial del navegador.
 
-Almacenamiento (Netlify Blobs, almacén `mejor-precio`): `lista`, `serie/<id>` (historial, última revisión, avisos ya enviados y resumen del mercado de cada producto), `alertas/<id>` (30 más recientes por producto) y `alertas/_sistema` (tiendas caídas, resumen semanal). Cada producto tiene sus propias claves para que una búsqueda a mano y la revisión programada no se pisen; dentro de un mismo proceso, `actualizar()` de `almacen.js` además pone en fila las escrituras de una misma clave. Los documentos viejos `estado` y `alertas` se reparten solos la primera vez. Otras claves: `config`, `ajustes`, `push`, `push-pendientes`, `salud`, `semanal`, `movimientos`, `proveedores`, `consulta/<id>` e `intentos`.
+Almacenamiento (Netlify Blobs, almacén `mejor-precio`): `lista`, `serie/<id>` (historial, última revisión, avisos ya enviados y resumen del mercado de cada producto), `alertas/<id>` (30 más recientes por producto) y `alertas/_sistema` (tiendas caídas, resumen semanal). Cada producto tiene sus propias claves para que una búsqueda a mano y la revisión programada no se pisen; dentro de un mismo proceso, `actualizar()` de `almacen.js` además pone en fila las escrituras de una misma clave. Los documentos viejos `estado` y `alertas` se reparten solos la primera vez. Otras claves: `config`, `ajustes`, `push`, `push-pendientes`, `salud`, `semanal`, `movimientos`, `proveedores`, `consulta/<id>`, `intentos`, `whatsapp`, `whatsapp-opciones`, `whatsapp-entrantes`, `avisos-enviados` y `avisos-historial`.
 
 La frecuencia (3, 6, 12 o 24 horas) y las tiendas que se revisan se eligen en **Ajustes**.
 
@@ -337,12 +337,15 @@ Emparejamiento con la carta (los id de la carta son los de TRIVO, `producto` o `
 Rutas: `PUT /api/mi-tienda/margen`, `POST /api/mi-tienda/propuestas` (calcular todos), `DELETE /api/mi-tienda/propuestas?id=`, `POST /api/mi-tienda/aplicar`, `POST /api/mi-tienda/deshacer`.
 ## 16. Avisos por WhatsApp al dueño
 
-**Archivos:** `src/whatsapp.js`, `notificarAvisos` y `mensajeWhatsapp` en `src/push.js`, `avisosDeAtencion` y `recordarPropuestas` en `src/mitienda.js` · **Tests:** `tests/whatsapp.test.js`
+**Archivos:** `src/whatsapp.js`, `src/respuestas.js`, `notificarAvisos` y `armarMensaje` en `src/push.js`, `avisosDeAtencion` y `recordarPropuestas` en `src/mitienda.js`, `src/hoy.js` · **Tests:** `tests/whatsapp.test.js`, `tests/trivo.test.js`, `tests/hoy.test.js`
 
 Todos los avisos que salen como notificación push salen también por WhatsApp, del número de la empresa al WhatsApp personal del dueño, con la **API oficial de Meta (WhatsApp Cloud API)**. Mejor Precio lo hace por su cuenta; no usa el WhatsApp de TRIVO.
 
-- **Un solo mensaje por revisión** con todos los avisos pendientes (hasta 25 líneas) y el enlace a la app (`URL` de Netlify o `APP_URL`).
-- **Horario de silencio:** igual que el push; lo que llega de noche sale junto en la primera revisión de la mañana.
+- **Un solo mensaje por revisión**, por secciones y en orden de urgencia (bajo el costo, por aprobar, por pedir, inventario en negativo, ofertas, tiendas, conexiones), cada una con su enlace a la app (`URL` de Netlify o `APP_URL`). Las ofertas de paquetes dicen el precio por unidad y a cuánto la vendes tú.
+- **Horario de silencio:** lo urgente (vender bajo el costo) sale igual, marcado «urgente»; lo demás sale junto en la primera revisión de la mañana como «lo de la noche».
+- **Sin repetir:** el mismo aviso (tipo, producto y precio) no vuelve a salir en 24 horas (`avisos-enviados`). Las compras, recordatorios y resúmenes sí salen siempre.
+- **Si falla el envío** (sin cupo, teléfono desvinculado…) el error queda en `whatsapp.error`, se ve en «Hoy» y en Ajustes, y los avisos vuelven a `push-pendientes` para el próximo intento (si no hay push).
+- **Historial:** cada envío y cada respuesta del dueño queda en `avisos-historial` (60 últimos); «Hoy → Avisos enviados» lo muestra con lo que pasó con cada precio (aplicado, por WhatsApp o en la app; descartado; pendiente).
 - **Qué avisa:** bajas de precio, precio objetivo, ofertas, se agota / se agotó / volvió (Mi lista); tiendas que no responden y resumen semanal; compra en TRIVO con precios por aprobar y recordatorio diario si siguen esperando (más de 20 h); producto bajo el mínimo de existencias en TRIVO; precio por debajo del costo; TRIVO que deja de responder o vuelve. Los de TRIVO se avisan una vez, cuando aparecen.
 - **Texto o plantilla:** primero se manda un texto normal (gratis si el dueño escribió al número de la empresa en las últimas 24 horas). Si WhatsApp responde que pasó esa ventana (error 131047), se manda la plantilla aprobada con todo el texto en su variable `{{1}}` (sin saltos de línea; la plantilla sí tiene costo por mensaje según las tarifas de Meta).
 
@@ -354,6 +357,23 @@ Todos los avisos que salen como notificación push salen también por WhatsApp, 
 4. Escribe el número del dueño y toca «Enviar una prueba».
 
 Rutas: `GET /api/whatsapp/vinculo` (estado y QR), `POST /api/whatsapp/desvincular`.
+
+### Aprobar precios respondiendo el WhatsApp (solo Green-API)
+
+Con Green-API cada precio por aprobar (compras en TRIVO, recordatorio diario y productos bajo el costo, que quedan como propuesta con tu margen) llega numerado. El dueño responde:
+
+| Respuesta | Qué hace |
+|---|---|
+| `1` · `1 3` · `sí 1, 3 y 4` | Pone esos precios en TRIVO (igual que «Aplicar» en Mi tienda: no pisa un precio que cambió en TRIVO, queda en el historial y se puede deshacer) |
+| `todos` | Todos los del último mensaje |
+| `no 2` · `descartar 2` | Descarta esa propuesta |
+| `precios` | Lista de nuevo los pendientes, numerados |
+| `ayuda` | Qué se puede responder |
+
+- Se activa en **Ajustes → Notificaciones → WhatsApp del dueño → Activar respuestas** (`POST /api/whatsapp/respuestas`): configura en Green-API el webhook `https://<app>/api/whatsapp/entrante` con `Authorization: Bearer <token>`, donde el token se deriva de `GREENAPI_TOKEN` (no hace falta otra variable). Solo cambia el webhook y los mensajes entrantes; Green-API tarda hasta 5 minutos en aplicarlo.
+- Solo cuentan los mensajes del chat del dueño; lo que escriban clientes o grupos al WhatsApp de la empresa, y cualquier texto que no sea una orden, se ignora sin responder.
+- Green-API reintenta cada minuto si no recibe respuesta: cada mensaje se atiende una sola vez (`whatsapp-entrantes`) y uno de más de 2 horas no se aplica.
+- Los números de un mensaje valen 3 días (`whatsapp-opciones`); después, la respuesta trae la lista actualizada.
 
 No hay plantillas ni ventana de 24 horas: siempre se manda texto. Es una conexión tipo WhatsApp Web, no la API oficial: WhatsApp puede bloquear números que la usan de forma rara (con pocos mensajes a un solo número el riesgo es bajo). Si el teléfono de la empresa cierra la sesión vinculada, hay que volver a escanear el QR.
 

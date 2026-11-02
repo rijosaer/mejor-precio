@@ -9,7 +9,9 @@ import { guardarLista, leerLista, novedades, registrarBusqueda, revisarSalud } f
 import { analizarProducto, aplicarPropuesta, descartarPropuesta, deshacerCambio, estadoMiTienda, guardarCostos, guardarMargenes, proponerTodos, sincronizarTrivo } from './mitienda.js';
 import { borrarProveedor, guardarProveedor, leerProveedores } from './proveedores.js';
 import { clavePublica, desuscribir, enviar, mensajeWhatsapp, pushActivo, suscribir, suscripciones } from './push.js';
-import { desvincularGreen, enviarWhatsapp, guardarWhatsapp, leerWhatsapp, vinculoGreen } from './whatsapp.js';
+import { activarRespuestas, desvincularGreen, enviarWhatsapp, estadoRespuestas, guardarWhatsapp, leerWhatsapp, vinculoGreen, webhookAutorizado } from './whatsapp.js';
+import { procesarEntrante } from './respuestas.js';
+import { hoy } from './hoy.js';
 
 const DIAS_SESION = 30;
 const MAX_INTENTOS = 10;
@@ -159,6 +161,19 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
       return json(200, { ok: true }, { 'set-cookie': 'mp=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' });
     }
 
+    // Mensajes que llegan al WhatsApp de la empresa (Green-API, con su token):
+    // las respuestas del dueño a los avisos. Siempre 200 para que no reintente.
+    if (ruta === '/api/whatsapp/entrante' && metodo === 'POST') {
+      if (!webhookAutorizado(request)) return json(401, { error: 'No autorizado' });
+      try {
+        const r = await procesarEntrante(await leerJson(request, 100_000));
+        if (r.orden) console.log('[whatsapp entrante]', r.orden);
+      } catch (error) {
+        console.error('[whatsapp entrante]', error.message);
+      }
+      return json(200, { ok: true });
+    }
+
     if (!sesionValida(request)) return json(401, { error: 'Inicia sesión' });
 
     // Las rutas que cambian datos exigen JSON: un formulario de otro sitio no
@@ -253,6 +268,23 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
         }
       });
     }
+    // Responder los avisos desde WhatsApp: Green-API manda las respuestas a /api/whatsapp/entrante.
+    if (ruta === '/api/whatsapp/respuestas' && ['GET', 'POST'].includes(metodo)) {
+      const base = process.env.URL || url.origin;
+      return validar(async () => {
+        try {
+          return json(200, metodo === 'POST' ? await activarRespuestas(base) : await estadoRespuestas(base));
+        } catch (error) {
+          if (error instanceof TypeError && !/fetch failed/.test(error.message)) throw error;
+          console.error('[whatsapp]', error.message);
+          return json(502, { error: error.message });
+        }
+      });
+    }
+
+    // Pantalla de inicio: lo que pide atención hoy y el historial de avisos.
+    if (ruta === '/api/hoy' && metodo === 'GET') return json(200, await hoy());
+
     if (ruta === '/api/whatsapp/probar' && metodo === 'POST') {
       const wa = await leerWhatsapp();
       if (!wa.servidor) return json(503, { error: 'Falta conectar WhatsApp en el servidor: GREENAPI_ID y GREENAPI_TOKEN (Green-API) o WHATSAPP_TOKEN y WHATSAPP_PHONE_ID (Meta)' });

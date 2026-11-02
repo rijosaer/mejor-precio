@@ -299,18 +299,31 @@ export async function sincronizarTrivo({ ahora = Date.now(), dias = 30 } = {}) {
   const nuevas = Object.keys(cambios).length ? await proponerPrecios({ carta, trivo: doc, cambios, ahora }) : [];
   const avisos = [];
   if (nuevas.length) {
-    avisos.push({ tipo: 'precio-compra', title: `Compra en TRIVO: ${nuevas.length} ${nuevas.length === 1 ? 'precio' : 'precios'} para aprobar`, body: nuevas.slice(0, 3).map((x) => `${x.nombre}: ${pesosTexto(x.precioActual)} → ${pesosTexto(x.precioNuevo)}`).join(' · '), url: '/#mitienda', t: ahora });
+    avisos.push({ tipo: 'precio-compra', title: `Compra en TRIVO: ${nuevas.length} ${nuevas.length === 1 ? 'precio' : 'precios'} para aprobar`, body: nuevas.slice(0, 3).map((x) => `${x.nombre}: ${pesosTexto(x.precioActual)} → ${pesosTexto(x.precioNuevo)}`).join(' · '), items: itemsDe(nuevas), url: '/#mitienda', t: ahora });
   }
-  avisos.push(...avisosDeAtencion(carta, productos, anterior, ahora, await leerMargenes()));
+  const atencion = avisosDeAtencion(carta, productos, anterior, ahora, await leerMargenes());
+  // Lo que quedó bajo el costo también queda como propuesta con tu margen: así
+  // se aprueba desde la app o respondiendo el WhatsApp.
+  const bajos = atencion.filter((a) => a.tipo === 'bajo-costo');
+  if (bajos.length) {
+    const propuestas = await proponerPrecios({ carta, trivo: doc, cambios: Object.fromEntries(bajos.map((a) => [a.clave, { costoAntes: null, motivo: 'bajo-costo' }])), ahora });
+    for (const a of bajos) {
+      const p = propuestas.find((x) => x.id === a.clave);
+      if (p) Object.assign(a, { propuesta: p.id, sugerido: p.precioNuevo });
+    }
+  }
+  avisos.push(...atencion);
   if (anterior?.error) avisos.push({ tipo: 'trivo', title: 'TRIVO volvió a responder', body: 'Costos, existencias y ventas al día.', url: '/#mitienda', t: ahora });
   if (avisos.length) await notificarAvisos(avisos, { ahora }).catch((e) => console.error('[push]', e.message));
   return { ...doc, costos, conCosto: Object.keys(reales).length, propuestasNuevas: nuevas.length };
 }
 
 const pesosTexto = (n) => `$${Math.round(n).toLocaleString('es-CO')}`;
+// Las propuestas dentro de un aviso, para numerarlas en WhatsApp.
+const itemsDe = (propuestas) => propuestas.slice(0, 15).map(({ id, nombre, precioActual, precioNuevo }) => ({ id, nombre, precioActual, precioNuevo }));
 
 // Avisos de lo que pide atención en TRIVO, solo cuando aparece: un producto que
-// baja del mínimo de existencias o un precio que queda por debajo del costo.
+// baja del mínimo de existencias, queda en negativo o tiene el precio por debajo del costo.
 // Cada aviso lleva el producto sin la variante (para juntar «Caliente» y «Fría»
 // en WhatsApp), lo vendido en 30 días y, si está bajo el costo, el precio con tu margen.
 export function avisosDeAtencion(carta, productos, anterior, ahora = Date.now(), margenes = null) {
@@ -321,6 +334,10 @@ export function avisosDeAtencion(carta, productos, anterior, ahora = Date.now(),
     const comun = { clave: p.id, nombre: p.nombre, base: p.base || p.nombre, variante: p.variante || null, vendidos: x?.ventas?.unidades ?? null, url: '/#mitienda', t: ahora };
     if (x?.fuente === 'directo' && x.bajo && !antes?.bajo && x.existencias !== null) {
       avisos.push({ tipo: 'bajo-minimo', ...comun, existencias: x.existencias, minimo: x.minimo ?? 0 });
+    }
+    // Existencias negativas: se vendió sin cargar la compra o el conteo está mal.
+    if (x?.fuente === 'directo' && x.existencias < 0 && !(antes?.existencias < 0)) {
+      avisos.push({ tipo: 'negativo', ...comun, existencias: x.existencias });
     }
     if (x?.bajoCosto && !antes?.bajoCosto) {
       const margen = margenes?.porProducto?.[p.id] ?? margenes?.general ?? MARGEN_POR_DEFECTO;
@@ -337,8 +354,9 @@ export async function recordarPropuestas({ ahora = Date.now() } = {}) {
   const ultimo = (await leer('mitienda-recordatorio'))?.t || 0;
   if (ahora - ultimo < 23 * 60 * 60_000) return false;
   await actualizar('mitienda-recordatorio', () => ({ t: ahora }));
-  const total = (await leerPropuestas()).length;
-  await notificarAvisos([{ tipo: 'recordatorio', title: `${total} ${total === 1 ? 'precio espera' : 'precios esperan'} tu aprobación`, body: viejas.slice(0, 3).map((x) => `${x.nombre}: ${pesosTexto(x.precioActual)} → ${pesosTexto(x.precioNuevo)}`).join(' · '), url: '/#mitienda', t: ahora }], { ahora });
+  const todas = await leerPropuestas();
+  const total = todas.length;
+  await notificarAvisos([{ tipo: 'recordatorio', title: `${total} ${total === 1 ? 'precio espera' : 'precios esperan'} tu aprobación`, body: viejas.slice(0, 3).map((x) => `${x.nombre}: ${pesosTexto(x.precioActual)} → ${pesosTexto(x.precioNuevo)}`).join(' · '), items: itemsDe(todas), url: '/#mitienda', t: ahora }], { ahora });
   return true;
 }
 
@@ -479,14 +497,14 @@ export async function leerHistorialPrecios() {
   return (await leer('mitienda-historial-precios')) || [];
 }
 
-// Aplica en TRIVO una propuesta que tú aprobaste.
-export async function aplicarPropuesta(id, { ahora = Date.now() } = {}) {
+// Aplica en TRIVO una propuesta que tú aprobaste (en la app o respondiendo el WhatsApp).
+export async function aplicarPropuesta(id, { ahora = Date.now(), via = 'app' } = {}) {
   const propuesta = ((await leer('mitienda-propuestas')) || {})[String(id)];
   if (!propuesta) throw new TypeError('Esa propuesta ya no existe');
   if (!(propuesta.precioNuevo - propuesta.descuento > propuesta.costo)) throw new TypeError('El precio quedaría por debajo del costo');
   const r = await cambiarPrecio({ producto: propuesta.producto, variante: propuesta.variante, precio: propuesta.precioNuevo, esperado: propuesta.precioActual });
   await descartarPropuesta(id);
-  await anotarHistorial({ id: `${ahora}-${propuesta.id}`, producto: propuesta.id, nombre: propuesta.nombre, antes: r.antes, despues: r.despues, costo: propuesta.costo, margen: propuesta.margen, motivo: propuesta.motivo, t: ahora });
+  await anotarHistorial({ id: `${ahora}-${propuesta.id}`, producto: propuesta.id, nombre: propuesta.nombre, antes: r.antes, despues: r.despues, costo: propuesta.costo, margen: propuesta.margen, motivo: propuesta.motivo, via, t: ahora });
   return r;
 }
 

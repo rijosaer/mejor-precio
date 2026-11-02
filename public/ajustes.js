@@ -195,8 +195,11 @@ function pintarVinculo(caja) {
     }
     if (!zona.isConnected) return;
     if (v.estado === 'authorized') {
+      const respuestas = el('p', 'aj-respuestas ayuda', 'Consultando si puedes responder los avisos…');
+      pintarRespuestas(respuestas);
       zona.replaceChildren(
         el('p', 'aj-vinculado', '✓ WhatsApp de la empresa vinculado (la sesión queda guardada en Green-API).'),
+        respuestas,
         boton('Desvincular', 'boton-texto', async (e) => {
           if (!confirm('¿Desvincular el WhatsApp de la empresa? Los avisos no salen hasta que vuelvas a escanear el QR.')) return;
           e.target.disabled = true;
@@ -223,6 +226,34 @@ function pintarVinculo(caja) {
   pedir();
 }
 
+// Responder los avisos desde WhatsApp: Green-API manda a la app los mensajes
+// del dueño («1», «todos», «precios»…).
+async function pintarRespuestas(p) {
+  let r;
+  try {
+    r = await api('/api/whatsapp/respuestas');
+  } catch (error) {
+    p.textContent = `No se pudo consultar Green-API: ${error.message}`;
+    return;
+  }
+  if (r.activo) {
+    p.textContent = '✓ Respuestas activas: el dueño aprueba los precios contestando el aviso con el número (o «todos»); «precios» lista los pendientes y «ayuda» explica el resto.';
+    return;
+  }
+  p.replaceChildren(
+    'Con las respuestas activas, el dueño aprueba los precios contestando el WhatsApp con el número, sin abrir la app. ',
+    boton('Activar respuestas', 'boton-texto', async (e) => {
+      e.target.disabled = true;
+      try {
+        await api('/api/whatsapp/respuestas', { method: 'POST', cuerpo: {} });
+        p.textContent = '✓ Listo. Green-API tarda hasta 5 minutos en empezar a mandar las respuestas.';
+      } catch (error) {
+        p.textContent = `No se pudo activar: ${error.message}`;
+      }
+    }),
+  );
+}
+
 async function pintarWhatsapp() {
   const caja = $('#aj-whatsapp');
   caja.replaceChildren();
@@ -243,6 +274,9 @@ async function pintarWhatsapp() {
   texto.textContent = wa.numero
     ? `${wa.activo ? 'Los avisos llegan' : 'Apagado: los avisos no llegan'} al WhatsApp +${wa.numero}.${wa.ultimo ? ` Último mensaje ${new Date(wa.ultimo.t).toLocaleString('es-CO')}.` : ''}`
     : 'Escribe el WhatsApp personal del dueño: ahí llegan todos los avisos que piden atención, en un solo mensaje por revisión y respetando el horario de silencio.';
+  if (wa.error && (!wa.ultimo || wa.error.t > wa.ultimo.t)) {
+    caja.append(el('p', 'error', `El último envío falló (${new Date(wa.error.t).toLocaleString('es-CO')}): ${wa.error.mensaje}. Los avisos esperan y se reintenta en cada revisión.`));
+  }
   const fila = el('div', 'rejilla');
   const etiqueta = el('label', '', 'WhatsApp del dueño');
   const numero = el('input');

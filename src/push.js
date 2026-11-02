@@ -109,6 +109,8 @@ export function textoAviso(a) {
       return { title: `Hay que pedir: ${a.nombre}`, body: `Quedan ${a.existencias} en TRIVO (mínimo ${a.minimo}).` };
     case 'bajo-costo':
       return { title: `Bajo tu costo: ${a.nombre}`, body: `Lo vendes a ${pesos.format(a.precio)} y te cuesta ${pesos.format(a.costo)}.` };
+    case 'negativo':
+      return { title: `Inventario en negativo: ${a.nombre}`, body: `TRIVO marca ${a.existencias}: revisa el conteo o la compra sin cargar.` };
     default:
       // Avisos que ya traen su texto (precios por compra, TRIVO, recordatorios).
       if (a.title) return { title: a.title, body: a.body || '' };
@@ -173,22 +175,52 @@ function porPedir(avisos) {
 }
 const todosAgotados = (avisos) => avisos.every((a) => !(Number(a.existencias) > 0));
 
+// Un paquete también por unidad, y lo que tú cobras por la misma unidad:
+// «$ 2.319 c/u · tú la vendes a $ 3.000 (+$ 681)».
+function lineaUnidad(a) {
+  const unidades = Number(a.unidades) || 1;
+  if (!(a.precio > 0) || (unidades <= 1 && !(a.tuUnidad > 0))) return '';
+  const unidad = a.precio / unidades;
+  const partes = unidades > 1 ? [`${plata(unidad)} c/u`] : [];
+  if (a.tuUnidad > 0) {
+    const gana = a.tuUnidad - unidad;
+    partes.push(`tú la vendes a ${plata(a.tuUnidad)}${Math.round(gana) ? ` (${gana > 0 ? '+' : '−'}${plata(Math.abs(gana))})` : ''}`);
+  }
+  return `\n   ${partes.join(' · ')}`;
+}
+
 function lineaCompra(a) {
   const nombre = nombreCorto(a.nombre);
   switch (a.tipo) {
     case 'oferta': {
       const pct = a.a > a.precio ? Math.round((1 - a.precio / a.a) * 100) : null;
-      return `• ${nombre}\n   ${a.tienda} *${plata(a.precio)}*${a.a ? ` (antes ${plata(a.a)}${pct ? `, −${pct} %` : ''})` : ''}`;
+      return `• ${nombre}\n   ${a.tienda} *${plata(a.precio)}*${a.a ? ` (antes ${plata(a.a)}${pct ? `, −${pct} %` : ''})` : ''}${lineaUnidad(a)}`;
     }
     case 'dulce':
-      return `• ${nombre}\n   ${a.tienda} *${plata(a.precio)}* (bajó de ${plata(a.antes)})`;
+      return `• ${nombre}\n   ${a.tienda} *${plata(a.precio)}* (bajó de ${plata(a.antes)})${lineaUnidad(a)}`;
     case 'umbral':
-      return `• ${nombre}\n   ${a.tienda} *${plata(a.precio)}* (tu objetivo: ${plata(a.umbral)})`;
+      return `• ${nombre}\n   ${a.tienda} *${plata(a.precio)}* (tu objetivo: ${plata(a.umbral)})${lineaUnidad(a)}`;
     case 'volvio':
-      return `• ${nombre}\n   volvió a ${a.tienda} a *${plata(a.precio)}*`;
+      return `• ${nombre}\n   volvió a ${a.tienda} a *${plata(a.precio)}*${lineaUnidad(a)}`;
     default:
       return lineaGeneral(a);
   }
+}
+
+// Lo que se puede aprobar respondiendo lleva una marca con el id de la
+// propuesta; al armar el mensaje se cambia por su número («*1.*»).
+const MARCA = /\u0001([^\u0002]+)\u0002/g;
+const vineta = (propuesta) => (propuesta ? `\u0001${propuesta}\u0002` : '• ');
+
+// Los precios por aprobar, uno por línea (sin repetir si vienen en la compra y en el recordatorio).
+function porAprobar(avisos) {
+  const vistos = new Set();
+  return avisos.flatMap((a) => {
+    if (!a.items?.length) return [lineaGeneral(a)];
+    return a.items
+      .filter((x) => !vistos.has(x.id) && vistos.add(x.id))
+      .map((x) => `${vineta(x.id)}${nombreCorto(x.nombre)}\n   ${plata(x.precioActual)} → *${plata(x.precioNuevo)}*`);
+  });
 }
 
 function lineaGeneral(a) {
@@ -207,11 +239,12 @@ const SECCIONES = [
         .sort((a, b) => b.costo - b.precio - (a.costo - a.precio))
         .map(
           (a) =>
-            `• ${nombreCorto(a.nombre)}\n   vendes ${plata(a.precio)} · cuesta ${plata(a.costo)} → *pierdes ${plata(a.costo - a.precio)}*` +
+            `${vineta(a.propuesta)}${nombreCorto(a.nombre)}\n   vendes ${plata(a.precio)} · cuesta ${plata(a.costo)} → *pierdes ${plata(a.costo - a.precio)}*` +
+            (a.vendidos > 0 ? ` (${a.vendidos} vendidos en 30 días: ${plata((a.costo - a.precio) * a.vendidos)})` : '') +
             (a.sugerido ? `\n   con tu margen (${a.margen} %): *${plata(a.sugerido)}*` : ''),
         ),
   },
-  { tipos: ['precio-compra', 'recordatorio'], titulo: '💲 *Precios por aprobar*', resumen: () => '💲 precios por aprobar', ruta: () => '/#mitienda', lineas: (a) => a.map(lineaGeneral) },
+  { tipos: ['precio-compra', 'recordatorio'], titulo: '💲 *Precios por aprobar*', resumen: (_, lineas, lista) => (lista.some((a) => a.items?.length) ? `💲 ${lineas.length} por aprobar` : '💲 precios por aprobar'), ruta: () => '/#mitienda', lineas: porAprobar, max: 12 },
   {
     tipos: ['bajo-minimo'],
     titulo: (avisos) => `📦 *Por pedir*${todosAgotados(avisos) ? ' · agotados en TRIVO' : ''}`,
@@ -219,6 +252,14 @@ const SECCIONES = [
     ruta: () => '/#mitienda',
     lineas: porPedir,
     max: 15,
+  },
+  {
+    tipos: ['negativo'],
+    titulo: '🧮 *Inventario en negativo*',
+    resumen: (n) => `🧮 ${n} en negativo`,
+    ruta: () => '/#mitienda',
+    lineas: (avisos) => avisos.sort((a, b) => a.existencias - b.existencias).map((a) => `• ${nombreCorto(a.nombre)}: TRIVO marca *${a.existencias}*`),
+    pie: '   Pasa cuando se vende sin haber cargado la compra o el conteo quedó mal: revísalo en TRIVO.',
   },
   {
     tipos: ['oferta', 'dulce', 'umbral', 'volvio'],
@@ -233,7 +274,10 @@ const SECCIONES = [
 ];
 const OTROS = { titulo: '🔔 *Otros avisos*', resumen: (n) => `🔔 ${n} más`, ruta: (a) => a.find((x) => x.url)?.url || '/', lineas: (a) => a.map(lineaGeneral) };
 
-export function mensajeWhatsapp(avisos, { ahora = Date.now() } = {}) {
+// `responder`: los precios por aprobar llevan número y se aprueban contestando
+// el mensaje (solo con Green-API, que recibe las respuestas). Devuelve el texto
+// y, en orden, los ids de las propuestas numeradas.
+export function armarMensaje(avisos, { ahora = Date.now(), responder = false, titulo = '' } = {}) {
   const conocidos = new Set(SECCIONES.flatMap((s) => s.tipos));
   const partes = [...SECCIONES.map((s) => [s, avisos.filter((a) => s.tipos.includes(a.tipo))]), [OTROS, avisos.filter((a) => !conocidos.has(a.tipo))]]
     .filter(([, lista]) => lista.length)
@@ -242,44 +286,116 @@ export function mensajeWhatsapp(avisos, { ahora = Date.now() } = {}) {
       const max = s.max || MAX_POR_SECCION;
       const extra = lineas.length > max ? [`   … y ${lineas.length - max} más en la app`] : [];
       const link = enlace(s.ruta(lista));
-      const titulo = typeof s.titulo === 'function' ? s.titulo(lista) : s.titulo;
-      return { resumen: s.resumen(lista.length, lineas), texto: [titulo, ...lineas.slice(0, max), ...extra, link ? `↳ ${link}` : ''].filter(Boolean).join('\n') };
+      const cabeza = typeof s.titulo === 'function' ? s.titulo(lista) : s.titulo;
+      return { resumen: s.resumen(lista.length, lineas, lista), texto: [cabeza, ...lineas.slice(0, max), ...extra, s.pie || '', link ? `↳ ${link}` : ''].filter(Boolean).join('\n') };
     });
   const fecha = new Intl.DateTimeFormat('es-CO', { timeZone: ZONA, weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(ahora));
-  const encabezado = [`*Mejor Precio* · ${fecha}`, partes.length > 1 ? partes.map((p) => p.resumen).join(' · ') : ''].filter(Boolean).join('\n');
-  return [encabezado, ...partes.map((p) => p.texto)].join('\n\n');
+  const encabezado = [`*Mejor Precio* · ${fecha}${titulo ? ` · ${titulo}` : ''}`, partes.length > 1 ? partes.map((p) => p.resumen).join(' · ') : ''].filter(Boolean).join('\n');
+  const opciones = [];
+  let texto = [encabezado, ...partes.map((p) => p.texto)].join('\n\n').replace(MARCA, (_, id) => {
+    if (!responder) return '• ';
+    if (!opciones.includes(id)) opciones.push(id);
+    return `*${opciones.indexOf(id) + 1}.* `;
+  });
+  if (opciones.length) {
+    const ejemplo = opciones.length > 1 ? '*1* o *1 3*' : '*1*';
+    texto += `\n\n↩️ Responde ${ejemplo} para poner ese precio en TRIVO${opciones.length > 1 ? ', o *todos*' : ''}. *precios* muestra los pendientes.`;
+  }
+  return { texto, opciones };
 }
+
+export const mensajeWhatsapp = (avisos, opciones) => armarMensaje(avisos, opciones).texto;
+
+// ── Envío ───────────────────────────────────────────────────────────────────
+// Lo urgente sale aunque sea horario de silencio; lo demás espera a la mañana.
+const URGENTES = new Set(['bajo-costo']);
+// Avisos que son un hecho nuevo cada vez (no un estado que se repite).
+const SIEMPRE = new Set(['precio-compra', 'recordatorio', 'semanal', 'trivo', 'prueba']);
+const NO_REPETIR_HORAS = 24;
+const MAX_HISTORIAL = 60;
+
+// El mismo aviso (tipo, producto y precio) no se repite en 24 horas: un
+// producto que entra y sale del mínimo o una oferta que reaparece no llenan el chat.
+export const huella = (a) => `${a.tipo}|${a.clave ?? a.nombre ?? a.title ?? ''}|${a.precio ?? ''}`;
+
+function sinRepetidos(avisos, enviados, ahora) {
+  const porHuella = new Map();
+  for (const a of avisos) {
+    const h = huella(a);
+    if (!SIEMPRE.has(a.tipo) && ahora - (enviados[h] || 0) < NO_REPETIR_HORAS * 60 * 60_000) continue;
+    porHuella.set(SIEMPRE.has(a.tipo) ? `${h}|${porHuella.size}` : h, a); // dentro de la tanda queda el más reciente
+  }
+  return [...porHuella.values()];
+}
+
+// Historial de lo que se avisó (y por dónde), para verlo en la app.
+export async function anotarAvisos(entrada) {
+  return actualizar('avisos-historial', (lista) => [entrada, ...(lista || [])].slice(0, MAX_HISTORIAL));
+}
+
+const resumenAviso = (a) => {
+  const t = textoAviso(a);
+  const propuestas = [a.propuesta, ...(a.items || []).map((x) => x.id)].filter(Boolean);
+  return { tipo: a.tipo, title: t.title, body: t.body, url: a.url || (a.q ? `/?q=${encodeURIComponent(a.q)}` : null), ...(propuestas.length ? { propuestas } : {}) };
+};
 
 // Avisos → notificaciones push y WhatsApp. Con más de 3 a la vez el push manda
 // una sola que los resume; WhatsApp siempre manda un solo mensaje con todos.
-// En horario de silencio se guardan y salen en la próxima revisión.
+// En horario de silencio se guardan (menos lo urgente) y salen en la primera
+// revisión de la mañana, marcados como «lo de la noche».
 export async function notificarAvisos(avisos, { ahora = Date.now() } = {}) {
   const wa = whatsappActivo() ? await leerWhatsapp() : null;
   const conWhatsapp = Boolean(wa?.activo && wa.numero);
   if (!pushActivo() && !conWhatsapp) return { enviadas: 0, motivo: 'sin-claves' };
   const config = await leerConfig();
-  const nuevos = avisos.map((a) => ({ ...a }));
+  const nuevos = avisos.map((a) => ({ t: ahora, ...a }));
   const pendientes = await actualizar('push-pendientes', (lista) => [...(lista || []), ...nuevos].slice(-MAX_PENDIENTES));
-  if (!pendientes.length || enSilencio(config.silencio, ahora)) return { enviadas: 0, motivo: pendientes.length ? 'silencio' : 'nada' };
-  await actualizar('push-pendientes', () => []);
+  if (!pendientes.length) return { enviadas: 0, motivo: 'nada' };
+  const silencio = enSilencio(config.silencio, ahora);
+  const salen = silencio ? pendientes.filter((a) => URGENTES.has(a.tipo)) : pendientes;
+  if (!salen.length) return { enviadas: 0, motivo: 'silencio' };
+  const quedan = silencio ? pendientes.filter((a) => !URGENTES.has(a.tipo)) : [];
+  await actualizar('push-pendientes', () => quedan);
+
+  const enviados = (await leer('avisos-enviados')) || {};
+  const lista = sinRepetidos(salen, enviados, ahora);
+  if (!lista.length) return { enviadas: 0, motivo: 'repetidos' };
+  const deLaNoche = !silencio && lista.some((a) => a.t < ahora - 30 * 60_000 && enSilencio(config.silencio, a.t));
   const resultado = { enviadas: 0 };
   if (conWhatsapp) {
-    resultado.whatsapp = await enviarWhatsapp(mensajeWhatsapp(pendientes, { ahora })).catch((e) => (console.error('[whatsapp]', e.message), { enviado: false, motivo: e.message }));
+    const { texto, opciones } = armarMensaje(lista, { ahora, responder: wa.proveedor === 'green-api', titulo: silencio ? '🔴 urgente' : deLaNoche ? '🌙 lo de la noche' : '' });
+    resultado.whatsapp = await enviarWhatsapp(texto).catch((e) => (console.error('[whatsapp]', e.message), { enviado: false, motivo: e.message }));
+    if (resultado.whatsapp.enviado && opciones.length) await actualizar('whatsapp-opciones', () => ({ t: ahora, ids: opciones }));
   }
-  if (!pushActivo()) return resultado;
-  if (pendientes.length > 3) {
-    const r = await enviar({
-      title: `${pendientes.length} avisos`,
-      body: pendientes.slice(0, 3).map((a) => textoAviso(a).title).join(' · '),
-      url: '/',
-      tag: 'mp-resumen',
+  if (pushActivo()) {
+    if (lista.length > 3) {
+      const r = await enviar({ title: `${lista.length} avisos`, body: lista.slice(0, 3).map((a) => textoAviso(a).title).join(' · '), url: '/', tag: 'mp-resumen' });
+      resultado.enviadas = r.enviadas || 0;
+    } else {
+      for (const a of lista) {
+        const r = await enviar({ ...textoAviso(a), url: a.url || (a.q ? `/?q=${encodeURIComponent(a.q)}` : '/'), tag: a.id || `${a.tipo}|${a.clave}` });
+        resultado.enviadas += r.enviadas || 0;
+      }
+    }
+  }
+  const llego = resultado.enviadas > 0 || resultado.whatsapp?.enviado;
+  if (llego) {
+    await actualizar('avisos-enviados', (actual) => {
+      const doc = Object.fromEntries(Object.entries(actual || {}).filter(([, t]) => ahora - t < 3 * NO_REPETIR_HORAS * 60 * 60_000));
+      for (const a of lista) if (!SIEMPRE.has(a.tipo)) doc[huella(a)] = ahora;
+      return doc;
     });
-    return { ...resultado, enviadas: r.enviadas || 0 };
+  } else if (conWhatsapp && !pushActivo()) {
+    // WhatsApp falló (sin cupo, teléfono desvinculado…) y no hay push: se
+    // guardan para el próximo intento y no se pierden.
+    await actualizar('push-pendientes', (actual) => [...lista, ...(actual || [])].slice(-MAX_PENDIENTES));
   }
-  for (const a of pendientes) {
-    const texto = textoAviso(a);
-    const r = await enviar({ ...texto, url: a.url || (a.q ? `/?q=${encodeURIComponent(a.q)}` : '/'), tag: a.id || `${a.tipo}|${a.clave}` });
-    resultado.enviadas += r.enviadas || 0;
-  }
+  await anotarAvisos({
+    t: ahora,
+    whatsapp: resultado.whatsapp ? { enviado: Boolean(resultado.whatsapp.enviado), error: resultado.whatsapp.enviado ? null : resultado.whatsapp.motivo || null } : null,
+    push: pushActivo() ? resultado.enviadas : null,
+    nota: silencio ? 'urgente, en horario de silencio' : deLaNoche ? 'lo de la noche' : null,
+    avisos: lista.slice(0, 40).map(resumenAviso),
+  }).catch((e) => console.error('[historial avisos]', e.message));
   return resultado;
 }
