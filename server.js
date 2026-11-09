@@ -99,7 +99,7 @@ const servidor = createServer(async (req, res) => {
   try {
     const { pathname } = new URL(req.url, 'http://localhost');
     if (pathname.startsWith('/api/')) return await pasarApi(req, res);
-    if (req.method === 'GET' && ['/', '/robots.txt', '/sitemap.xml'].includes(pathname)) {
+    if (req.method === 'GET' && (['/', '/robots.txt', '/sitemap.xml'].includes(pathname) || pathname.startsWith('/producto/'))) {
       return await responder(res, await responderTienda(new Request(new URL(req.url, `http://${req.headers.host || 'localhost'}`))));
     }
     if (req.method === 'GET') return await servirArchivo(res, pathname);

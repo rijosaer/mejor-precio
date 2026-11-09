@@ -1,8 +1,9 @@
 // La página principal: la tienda pública de Agua Pure, sin clave. Muestra la
 // carta de TRIVO como catálogo con fotos; cada producto tiene «Comprar» (abre
 // la carta de TRIVO, donde se arma el pedido) y «Pedir» (abre WhatsApp con el
-// producto ya escrito). Se arma en el servidor para que Google lea los
-// productos, los precios y los datos del negocio en Valledupar.
+// producto ya escrito). Cada producto tiene además su propia página
+// (/producto/…) para que Google lo muestre solo. Todo se arma en el servidor
+// para que Google lea los productos, los precios y los datos del negocio.
 // El panel administrativo (la app con clave) quedó en /panel.
 import { escribir, leer } from './almacen.js';
 import { pedir } from './http.js';
@@ -158,11 +159,26 @@ const precioTexto = (n) => pesos.format(n).replace(/\s/g, ' ');
 
 const telefonoTexto = (n) => (n?.length === 10 ? `${n.slice(0, 3)} ${n.slice(3, 6)} ${n.slice(6)}` : n);
 
+const mayuscula = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
+
 export function enlaceWhatsapp(numero, texto) {
   return numero ? `https://wa.me/${numero}?text=${encodeURIComponent(texto)}` : null;
 }
 
 const textoPedido = (marca, p) => `Hola ${marca}, quiero pedir:\n• 1 × ${p.nombre} (${precioTexto(p.precio)})\n\nMi dirección es: `;
+
+// Cada producto tiene su página para que Google lo muestre solo:
+// «/producto/caja-aguila-original-x-24-unidades-lata-al-por-mayor-523». El
+// número es el id de TRIVO; si el nombre cambia, la dirección vieja redirige.
+export const rutaProducto = (p) => `/producto/${slug(p.nombre)}-${p.id}`;
+
+function buscarProducto(carta, id) {
+  for (const seccion of carta.secciones) {
+    const p = seccion.productos.find((x) => String(x.id) === id);
+    if (p) return { p, seccion };
+  }
+  return null;
+}
 
 const ICONOS = {
   chat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.7-1.2A9 9 0 1 0 12 3Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
@@ -175,24 +191,33 @@ const ICONOS = {
 
 const iconoDe = (seccion) => (/hielo/i.test(seccion) && !/cerve|caja|cab/i.test(seccion) ? 'hielo' : /agua/i.test(seccion) ? 'gota' : 'lata');
 
+const sinFoto = (seccion) => `<div class="t-sinfoto t-sinfoto-${iconoDe(seccion.nombre)}">${ICONOS[iconoDe(seccion.nombre)]}</div>`;
+
+const precioHtml = (p) => `${p.desde ? '<span class="t-desde">Desde</span> ' : ''}<strong>${precioTexto(p.precio)}</strong>${p.antes ? ` <s>${precioTexto(p.antes)}</s>` : ''}`;
+
+function botonesCompra(p, carta, grande = false) {
+  if (!p.disponible) return '<span class="t-agotado">Agotado por ahora</span>';
+  const wa = enlaceWhatsapp(carta.whatsapp, textoPedido(carta.marca, p));
+  const g = grande ? ' t-grande' : '';
+  return (
+    `<a class="t-comprar${g}" href="${CARTA}" target="_blank" rel="noopener" aria-label="Comprar ${esc(p.nombre)} en nuestra carta">${ICONOS.bolsa}<span>${grande ? 'Comprar en la carta' : 'Comprar'}</span></a>` +
+    (wa ? `<a class="t-wa${g}" href="${esc(wa)}" target="_blank" rel="noopener" aria-label="Pedir ${esc(p.nombre)} por WhatsApp">${ICONOS.chat}<span>${grande ? 'Pedir por WhatsApp' : 'Pedir'}</span></a>` : '')
+  );
+}
+
 // Las primeras fotos (las que se ven al abrir) cargan ya; las demás, al bajar.
 function tarjeta(p, seccion, carta, pendientes) {
-  const wa = enlaceWhatsapp(carta.whatsapp, textoPedido(carta.marca, p));
+  const ruta = rutaProducto(p);
   const foto = p.imagen
     ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" width="400" height="300" ${pendientes.fotos-- > 0 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`
-    : `<div class="t-sinfoto t-sinfoto-${iconoDe(seccion.nombre)}">${ICONOS[iconoDe(seccion.nombre)]}</div>`;
-  const precio = `${p.desde ? '<span class="t-desde">Desde</span> ' : ''}<strong>${precioTexto(p.precio)}</strong>${p.antes ? ` <s>${precioTexto(p.antes)}</s>` : ''}`;
-  const botones = p.disponible
-    ? `<a class="t-comprar" href="${CARTA}" target="_blank" rel="noopener" aria-label="Comprar ${esc(p.nombre)} en nuestra carta">${ICONOS.bolsa}<span>Comprar</span></a>` +
-      (wa ? `<a class="t-wa" href="${esc(wa)}" target="_blank" rel="noopener" aria-label="Pedir ${esc(p.nombre)} por WhatsApp">${ICONOS.chat}<span>Pedir</span></a>` : '')
-    : '<span class="t-agotado">Agotado por ahora</span>';
+    : sinFoto(seccion);
   return `<li class="t-producto${p.disponible ? '' : ' t-no'}" id="producto-${esc(p.id)}" data-buscar="${esc(`${p.nombre} ${seccion.nombre}`)}">
-  <figure class="t-foto">${foto}${p.antes ? '<span class="t-cinta">Promo</span>' : p.destacado ? '<span class="t-cinta">Destacado</span>' : ''}</figure>
+  <a class="t-foto-enlace" href="${esc(ruta)}" tabindex="-1" aria-hidden="true"><figure class="t-foto">${foto}${p.antes ? '<span class="t-cinta">Promo</span>' : p.destacado ? '<span class="t-cinta">Destacado</span>' : ''}</figure></a>
   <div class="t-info">
-    <h3>${esc(p.nombre)}</h3>
+    <h3><a href="${esc(ruta)}">${esc(p.nombre)}</a></h3>
     ${p.descripcion ? `<p class="t-desc">${esc(p.descripcion)}</p>` : ''}
-    <p class="t-precio">${precio}</p>
-    <div class="t-botones">${botones}</div>
+    <p class="t-precio">${precioHtml(p)}</p>
+    <div class="t-botones">${botonesCompra(p, carta)}</div>
   </div>
 </li>`;
 }
@@ -204,15 +229,19 @@ function textosSeo(carta) {
   const cosas = [hay(/cervez|cab/) && 'cerveza', hay(/licor|aguardiente|ron|whisk/) && 'licores', hay(/hielo|cab/) && 'hielo', hay(/agua/) && 'agua'].filter(Boolean);
   const lista = cosas.length ? cosas : ['bebidas'];
   const enLista = lista.length > 1 ? `${lista.slice(0, -1).join(', ')} y ${lista.at(-1)}` : lista[0];
-  const titulo = `${enLista.charAt(0).toUpperCase()}${enLista.slice(1)} a domicilio en ${carta.ciudad} | ${carta.marca}`;
+  const titulo = `${mayuscula(enLista)} a domicilio en ${carta.ciudad} | ${carta.marca}`;
   const descripcion = `Pide ${nombres.join(', ').replace(/, ([^,]*)$/, ' y $1')} a domicilio en ${carta.ciudad}. Mira fotos y precios al día, y compra en nuestra carta o por WhatsApp.`;
   return { titulo, descripcion, enLista };
 }
 
-function datosEstructurados(carta, base) {
-  const negocio = {
+// «</script>» dentro del JSON cerraría la etiqueta.
+const ld = (...datos) => datos.map((d) => `<script type="application/ld+json">${JSON.stringify(d).replace(/</g, '\\u003c')}</script>`).join('\n');
+
+function negocioLd(carta, base) {
+  return {
     '@context': 'https://schema.org',
     '@type': 'LiquorStore',
+    '@id': `${base}/#negocio`,
     name: carta.marca,
     description: carta.lema || undefined,
     url: `${base}/`,
@@ -228,45 +257,139 @@ function datosEstructurados(carta, base) {
       ? [{ '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], opens: carta.horario.abre, closes: carta.horario.cierra }]
       : undefined,
   };
-  const productos = carta.secciones.flatMap((s) => s.productos);
-  const catalogo = {
+}
+
+// En la principal, la lista apunta a la página de cada producto (ahí van sus datos completos).
+function catalogoLd(carta, base) {
+  return {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
     name: `Productos de ${carta.marca} en ${carta.ciudad}`,
-    itemListElement: productos.map((p, i) => ({
-      '@type': 'ListItem',
-      position: i + 1,
-      item: {
-        '@type': 'Product',
-        name: p.nombre,
-        image: p.imagen || undefined,
-        description: p.descripcion || undefined,
-        offers: {
-          '@type': 'Offer',
-          price: p.precio,
-          priceCurrency: 'COP',
-          availability: p.disponible ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-          url: `${base}/#producto-${p.id}`,
-          seller: { '@type': 'Organization', name: carta.marca },
-        },
-      },
-    })),
+    itemListElement: carta.secciones
+      .flatMap((s) => s.productos)
+      .map((p, i) => ({ '@type': 'ListItem', position: i + 1, url: `${base}${rutaProducto(p)}`, name: p.nombre })),
   };
-  // «</script>» dentro del JSON cerraría la etiqueta.
-  return [negocio, catalogo].map((d) => `<script type="application/ld+json">${JSON.stringify(d).replace(/</g, '\\u003c')}</script>`).join('\n');
 }
+
+function productoLd(p, seccion, carta, base) {
+  const url = `${base}${rutaProducto(p)}`;
+  return [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      '@id': `${url}#producto`,
+      name: p.nombre,
+      image: p.imagen ? [p.imagen] : undefined,
+      description: p.descripcion || descripcionProducto(p, carta),
+      sku: String(p.id),
+      category: seccion.nombre,
+      url,
+      offers: {
+        '@type': 'Offer',
+        url,
+        price: p.precio,
+        priceCurrency: 'COP',
+        availability: p.disponible ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+        itemCondition: 'https://schema.org/NewCondition',
+        seller: { '@type': 'Organization', name: carta.marca, '@id': `${base}/#negocio` },
+        areaServed: { '@type': 'City', name: carta.ciudad },
+      },
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Inicio', item: `${base}/` },
+        { '@type': 'ListItem', position: 2, name: seccion.nombre, item: `${base}/#${seccion.id}` },
+        { '@type': 'ListItem', position: 3, name: p.nombre, item: url },
+      ],
+    },
+  ];
+}
+
+const descripcionProducto = (p, carta) =>
+  `${p.nombre} a ${precioTexto(p.precio)} con domicilio en ${carta.ciudad}. ` +
+  (p.descripcion ? `${p.descripcion.replace(/\.?$/, '.')} ` : '') +
+  `Compra en nuestra carta o pide por WhatsApp${carta.pedidos.minimo ? `; pedido mínimo ${precioTexto(carta.pedidos.minimo)}` : ''}.`;
 
 const fechaTexto = (t) =>
   new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' }).format(t);
 
-export function paginaHtml(carta, { base }) {
-  const { titulo, descripcion, enLista } = textosSeo(carta);
-  const waGeneral = enlaceWhatsapp(carta.whatsapp, `Hola ${carta.marca}, quiero hacer un pedido a domicilio en ${carta.ciudad}.`);
-  const chips = [
+// Lo que comparten la principal y la página de cada producto.
+function cabeza(carta, { titulo, descripcion, canonica, imagen, tipo = 'website', datos = '', robots = 'index, follow, max-image-preview:large' }) {
+  return `<!doctype html>
+<html lang="es-CO">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>${esc(titulo)}</title>
+<meta name="description" content="${esc(descripcion)}">
+${canonica ? `<link rel="canonical" href="${esc(canonica)}">` : ''}
+<meta name="robots" content="${robots}">
+<meta name="theme-color" content="#102c3f">
+<meta name="color-scheme" content="light">
+<meta name="geo.region" content="CO-CES">
+<meta name="geo.placename" content="${esc(carta.ciudad)}">
+<meta property="og:type" content="${tipo}">
+<meta property="og:locale" content="es_CO">
+<meta property="og:site_name" content="${esc(carta.marca)}">
+<meta property="og:title" content="${esc(titulo)}">
+<meta property="og:description" content="${esc(descripcion)}">
+${canonica ? `<meta property="og:url" content="${esc(canonica)}">` : ''}
+${imagen ? `<meta property="og:image" content="${esc(imagen)}">\n<meta name="twitter:card" content="summary_large_image">` : ''}
+${carta.logo ? `<link rel="icon" href="${esc(carta.logo)}">\n<link rel="apple-touch-icon" href="${esc(carta.logo)}">` : '<link rel="icon" href="/icons/icon-192.png" type="image/png">'}
+<link rel="preload" href="/fuentes/montserrat-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/tienda.css">
+${datos}
+<script src="/tienda.js" type="module"></script>
+</head>
+<body>`;
+}
+
+const whatsappGeneral = (carta) => enlaceWhatsapp(carta.whatsapp, `Hola ${carta.marca}, quiero hacer un pedido a domicilio en ${carta.ciudad}.`);
+
+function barra(carta) {
+  const wa = whatsappGeneral(carta);
+  return `<header class="t-barra">
+  <div class="t-ancho t-barra-dentro">
+    <a class="t-marca" href="/" aria-label="${esc(carta.marca)}, inicio">
+      ${carta.logo ? `<img src="${esc(carta.logo)}" alt="" width="44" height="44">` : ''}
+      <span>${esc(carta.marca)}<small>Ice &amp; bebidas</small></span>
+    </a>
+    ${wa ? `<a class="t-ayuda" href="${esc(wa)}" target="_blank" rel="noopener">${ICONOS.chat}<span>¿Te ayudamos?</span></a>` : ''}
+  </div>
+</header>`;
+}
+
+function pie(carta) {
+  return `<footer class="t-pie">
+  <div class="t-ancho">
+    <p><b>${esc(carta.marca)}</b> · Domicilios en ${esc(carta.ciudad)}, Cesar${carta.direccion ? ` · ${esc(carta.direccion)}` : ''}</p>
+    ${carta.pedidos.nota ? `<p>${esc(carta.pedidos.nota)}</p>` : ''}
+    <p>${carta.telefono ? `Teléfono y WhatsApp: <a href="tel:+57${esc(carta.telefono)}">${esc(telefonoTexto(carta.telefono))}</a>` : ''}${carta.instagram ? ` · <a href="${esc(carta.instagram)}" target="_blank" rel="noopener">Instagram</a>` : ''} · <a href="${CARTA}" target="_blank" rel="noopener">Nuestra carta en TRIVO</a></p>
+    <p class="t-fecha">Precios en pesos colombianos (actualizados el ${esc(fechaTexto(carta.t))}). La venta de bebidas alcohólicas es solo para mayores de edad. El exceso de alcohol es perjudicial para la salud.</p>
+  </div>
+</footer>
+</body>
+</html>`;
+}
+
+function chipsPedido(carta) {
+  return [
     `${ICONOS.pin}<span>Domicilios en <b>${esc(carta.ciudad)}</b></span>`,
     carta.pedidos.minimo ? `<span>Pedido mínimo <b>${precioTexto(carta.pedidos.minimo)}</b></span>` : '',
     carta.pedidos.pagos.length ? `<span>Pagas con <b>${esc(carta.pedidos.pagos.join(' o '))}</b></span>` : '',
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .map((c) => `<li>${c}</li>`)
+    .join('');
+}
+
+const avisoViejo = (carta) => (carta.vieja ? '<p class="t-aviso">Estos precios son de la última vez que cargó nuestra carta. Confirma el precio al pedir.</p>' : '');
+
+export function paginaHtml(carta, { base }) {
+  const { titulo, descripcion, enLista } = textosSeo(carta);
+  const wa = whatsappGeneral(carta);
   const pendientes = { fotos: 4 };
   const secciones = carta.secciones
     .map(
@@ -279,53 +402,19 @@ ${s.productos.map((p) => tarjeta(p, s, carta, pendientes)).join('\n')}
     )
     .join('\n');
 
-  return `<!doctype html>
-<html lang="es-CO">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>${esc(titulo)}</title>
-<meta name="description" content="${esc(descripcion)}">
-<link rel="canonical" href="${esc(base)}/">
-<meta name="robots" content="index, follow, max-image-preview:large">
-<meta name="theme-color" content="#102c3f">
-<meta name="color-scheme" content="light">
-<meta name="geo.region" content="CO-CES">
-<meta name="geo.placename" content="${esc(carta.ciudad)}">
-<meta property="og:type" content="website">
-<meta property="og:locale" content="es_CO">
-<meta property="og:site_name" content="${esc(carta.marca)}">
-<meta property="og:title" content="${esc(titulo)}">
-<meta property="og:description" content="${esc(descripcion)}">
-<meta property="og:url" content="${esc(base)}/">
-${carta.portada ? `<meta property="og:image" content="${esc(carta.portada)}">\n<meta name="twitter:card" content="summary_large_image">` : ''}
-${carta.logo ? `<link rel="icon" href="${esc(carta.logo)}">\n<link rel="apple-touch-icon" href="${esc(carta.logo)}">` : '<link rel="icon" href="icons/icon-192.png" type="image/png">'}
-<link rel="preload" href="fuentes/montserrat-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="tienda.css">
-${datosEstructurados(carta, base)}
-<script src="tienda.js" type="module"></script>
-</head>
-<body>
+  return `${cabeza(carta, { titulo, descripcion, canonica: `${base}/`, imagen: carta.portada, datos: ld(negocioLd(carta, base), catalogoLd(carta, base)) })}
 <a class="t-saltar" href="#productos">Ir a los productos</a>
-<header class="t-barra">
-  <div class="t-ancho t-barra-dentro">
-    <a class="t-marca" href="./" aria-label="${esc(carta.marca)}, inicio">
-      ${carta.logo ? `<img src="${esc(carta.logo)}" alt="" width="44" height="44">` : ''}
-      <span>${esc(carta.marca)}<small>Ice &amp; bebidas</small></span>
-    </a>
-    ${waGeneral ? `<a class="t-ayuda" href="${esc(waGeneral)}" target="_blank" rel="noopener">${ICONOS.chat}<span>¿Te ayudamos?</span></a>` : ''}
-  </div>
-</header>
+${barra(carta)}
 
 <section class="t-portada">
   ${carta.portada ? `<img class="t-portada-foto" src="${esc(carta.portada)}" alt="" width="1536" height="1024" fetchpriority="high">` : ''}
   <div class="t-ancho t-portada-texto">
-    <h1>${esc(enLista.charAt(0).toUpperCase() + enLista.slice(1))} a domicilio en ${esc(carta.ciudad)}</h1>
+    <h1>${esc(mayuscula(enLista))} a domicilio en ${esc(carta.ciudad)}</h1>
     <p>${esc(carta.lema || 'Bebidas frías a tu puerta.')}</p>
-    <ul class="t-chips">${chips.map((c) => `<li>${c}</li>`).join('')}</ul>
+    <ul class="t-chips">${chipsPedido(carta)}</ul>
     <div class="t-portada-botones">
       <a class="t-comprar t-grande" href="#productos">Ver productos</a>
-      ${waGeneral ? `<a class="t-wa t-grande" href="${esc(waGeneral)}" target="_blank" rel="noopener">${ICONOS.chat}<span>Pedir por WhatsApp</span></a>` : ''}
+      ${wa ? `<a class="t-wa t-grande" href="${esc(wa)}" target="_blank" rel="noopener">${ICONOS.chat}<span>Pedir por WhatsApp</span></a>` : ''}
     </div>
   </div>
 </section>
@@ -338,29 +427,88 @@ ${datosEstructurados(carta, base)}
 </nav>
 
 <main id="productos" class="t-ancho">
-${carta.vieja ? '<p class="t-aviso">Estos precios son de la última vez que cargó nuestra carta. Confirma el precio al pedir.</p>' : ''}
+${avisoViejo(carta)}
 ${secciones}
-<p class="t-vacio" hidden>No encontramos ese producto. ${waGeneral ? `<a href="${esc(waGeneral)}" target="_blank" rel="noopener">Pregúntanos por WhatsApp</a>.` : ''}</p>
+<p class="t-vacio" hidden>No encontramos ese producto. ${wa ? `<a href="${esc(wa)}" target="_blank" rel="noopener">Pregúntanos por WhatsApp</a>.` : ''}</p>
 </main>
 
-<footer class="t-pie">
-  <div class="t-ancho">
-    <p><b>${esc(carta.marca)}</b> · Domicilios en ${esc(carta.ciudad)}, Cesar${carta.direccion ? ` · ${esc(carta.direccion)}` : ''}</p>
-    ${carta.pedidos.nota ? `<p>${esc(carta.pedidos.nota)}</p>` : ''}
-    <p>${carta.telefono ? `Teléfono y WhatsApp: <a href="tel:+57${esc(carta.telefono)}">${esc(telefonoTexto(carta.telefono))}</a>` : ''}${carta.instagram ? ` · <a href="${esc(carta.instagram)}" target="_blank" rel="noopener">Instagram</a>` : ''} · <a href="${CARTA}" target="_blank" rel="noopener">Nuestra carta en TRIVO</a></p>
-    <p class="t-fecha">Precios en pesos colombianos, al ${esc(fechaTexto(carta.t))}. La venta de bebidas alcohólicas es solo para mayores de edad. El exceso de alcohol es perjudicial para la salud.</p>
+${pie(carta)}`;
+}
+
+// La página de un producto: foto grande, precio, cómo pedirlo y otros de su sección.
+export function paginaProducto(carta, p, seccion, { base }) {
+  const url = `${base}${rutaProducto(p)}`;
+  const otros = seccion.productos.filter((x) => x.id !== p.id).sort((a, b) => Boolean(b.imagen) - Boolean(a.imagen)).slice(0, 8);
+  const pendientes = { fotos: 0 };
+  return `${cabeza(carta, {
+    titulo: `${p.nombre} a domicilio en ${carta.ciudad} | ${carta.marca}`,
+    descripcion: descripcionProducto(p, carta),
+    canonica: url,
+    imagen: p.imagen || carta.portada,
+    tipo: 'product',
+    datos: ld(...productoLd(p, seccion, carta, base)),
+  })}
+${barra(carta)}
+<nav class="t-ancho t-migas" aria-label="Estás en">
+  <ol><li><a href="/">Inicio</a></li><li><a href="/#${esc(seccion.id)}">${esc(seccion.nombre)}</a></li><li aria-current="page">${esc(p.nombre)}</li></ol>
+</nav>
+<main class="t-ancho">
+${avisoViejo(carta)}
+<article class="t-ficha${p.disponible ? '' : ' t-no'}">
+  <figure class="t-ficha-foto">${p.imagen ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" width="800" height="600" fetchpriority="high">` : sinFoto(seccion)}</figure>
+  <div class="t-ficha-info">
+    <p class="t-ficha-seccion">${esc(seccion.nombre)}</p>
+    <h1>${esc(p.nombre)}</h1>
+    <p class="t-precio t-ficha-precio">${precioHtml(p)}</p>
+    <p class="t-ficha-estado">${p.disponible ? `Disponible · domicilio en ${esc(carta.ciudad)}` : 'Agotado por ahora'}</p>
+    ${p.descripcion ? `<p class="t-ficha-desc">${esc(p.descripcion)}</p>` : ''}
+    <div class="t-ficha-botones">${botonesCompra(p, carta, true)}</div>
+    <ul class="t-chips t-ficha-chips">${chipsPedido(carta)}</ul>
   </div>
-</footer>
-</body>
-</html>`;
+</article>
+${
+  otros.length
+    ? `<section class="t-seccion" aria-labelledby="t-otros">
+<h2 id="t-otros">Más de ${esc(seccion.nombre.toLowerCase())}</h2>
+<ul class="t-rejilla">
+${otros.map((x) => tarjeta(x, seccion, carta, pendientes)).join('\n')}
+</ul>
+<p class="t-mas"><a href="/#productos">Ver todos los productos</a></p>
+</section>`
+    : ''
+}
+</main>
+${pie(carta)}`;
+}
+
+function paginaNoEsta(carta) {
+  return `${cabeza(carta, { titulo: `Producto no disponible | ${carta.marca}`, descripcion: `Este producto ya no está en la carta de ${carta.marca}.`, robots: 'noindex' })}
+${barra(carta)}
+<main class="t-ancho t-caida"><h1>Este producto ya no está en la carta</h1><p>Mira lo que tenemos hoy.</p><p><a class="t-comprar t-grande" href="/#productos">Ver todos los productos</a></p></main>
+${pie(carta)}`;
 }
 
 // Cuando la carta no se pudo leer nunca: una página corta que manda a TRIVO.
 function paginaSinCarta() {
   return `<!doctype html>
 <html lang="es-CO"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agua Pure · Valledupar</title><meta name="robots" content="noindex"><link rel="stylesheet" href="tienda.css"><script src="tienda.js" type="module"></script></head>
+<title>Agua Pure · Valledupar</title><meta name="robots" content="noindex"><link rel="stylesheet" href="/tienda.css"><script src="/tienda.js" type="module"></script></head>
 <body><main class="t-ancho t-caida"><h1>Agua Pure</h1><p>La carta no cargó en este momento.</p><p><a class="t-comprar t-grande" href="${CARTA}">Ver la carta y pedir</a></p></main></body></html>`;
+}
+
+function mapaDelSitio(carta, base) {
+  const fecha = new Date(carta?.t || Date.now()).toISOString().slice(0, 10);
+  const urls = [`  <url><loc>${esc(base)}/</loc><lastmod>${fecha}</lastmod></url>`];
+  for (const p of carta?.secciones.flatMap((s) => s.productos) || []) {
+    urls.push(
+      `  <url><loc>${esc(base + rutaProducto(p))}</loc><lastmod>${fecha}</lastmod>${p.imagen ? `<image:image><image:loc>${esc(p.imagen)}</image:loc></image:image>` : ''}</url>`,
+    );
+  }
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+${urls.join('\n')}
+</urlset>
+`;
 }
 
 // Los encabezados de netlify.toml no llegan a las respuestas de funciones.
@@ -374,6 +522,7 @@ const SEGURIDAD = {
 // La CDN de Netlify guarda la página 5 minutos y la sirve vieja (mientras
 // refresca) si TRIVO tarda: Google y los clientes la reciben rápido.
 const CACHE = { 'cache-control': 'public, max-age=60', 'netlify-cdn-cache-control': 'public, durable, s-maxage=300, stale-while-revalidate=86400' };
+const HTML = { ...SEGURIDAD, ...CACHE, 'content-type': 'text/html; charset=utf-8' };
 
 const baseDe = (request) => (process.env.URL || new URL(request.url).origin).replace(/\/$/, '');
 
@@ -387,11 +536,7 @@ export async function responderTienda(request) {
   }
   const carta = await cargarCarta();
   if (url.pathname === '/sitemap.xml') {
-    const fecha = new Date(carta?.t || Date.now()).toISOString().slice(0, 10);
-    return new Response(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${esc(base)}/</loc><lastmod>${fecha}</lastmod><changefreq>daily</changefreq></url>\n</urlset>\n`,
-      { headers: { ...SEGURIDAD, ...CACHE, 'content-type': 'application/xml; charset=utf-8' } },
-    );
+    return new Response(mapaDelSitio(carta, base), { headers: { ...SEGURIDAD, ...CACHE, 'content-type': 'application/xml; charset=utf-8' } });
   }
   if (!carta) {
     return new Response(paginaSinCarta(), {
@@ -399,7 +544,16 @@ export async function responderTienda(request) {
       headers: { ...SEGURIDAD, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'retry-after': '300' },
     });
   }
-  return new Response(paginaHtml(carta, { base }), { headers: { ...SEGURIDAD, ...CACHE, 'content-type': 'text/html; charset=utf-8' } });
+  if (url.pathname.startsWith('/producto/')) {
+    const id = url.pathname.match(/-(\d+)\/?$/)?.[1];
+    const hallado = id ? buscarProducto(carta, id) : null;
+    if (!hallado) return new Response(paginaNoEsta(carta), { status: 404, headers: HTML });
+    const ruta = rutaProducto(hallado.p);
+    // Nombre viejo o mal escrito: a la dirección de hoy, para que Google guarde una sola.
+    if (url.pathname !== ruta) return new Response(null, { status: 301, headers: { ...SEGURIDAD, ...CACHE, location: `${base}${ruta}` } });
+    return new Response(paginaProducto(carta, hallado.p, hallado.seccion, { base }), { headers: HTML });
+  }
+  return new Response(paginaHtml(carta, { base }), { headers: HTML });
 }
 
 // Para las pruebas.

@@ -15,7 +15,7 @@ const real = JSON.parse(await readFile(new URL('./fixtures/trivo-carta.json', im
 let respuestaTrivo = () => new Response(JSON.stringify(real));
 globalThis.fetch = async (url) => (/trivo-pos\.com\/api\/public\/menu\/agua-pure/.test(String(url)) ? respuestaTrivo() : new Response('no', { status: 404 }));
 
-const { armarCarta, nombreVisible, paginaHtml, responderTienda, olvidarMemoria } = await import('../src/tienda.js');
+const { armarCarta, nombreVisible, paginaHtml, responderTienda, olvidarMemoria, rutaProducto } = await import('../src/tienda.js');
 const { enPanel } = await import('../src/push.js');
 
 const copia = () => structuredClone(real.data);
@@ -65,7 +65,8 @@ test('la página: SEO de Valledupar, datos para Google, Comprar hacia TRIVO y Pe
   assert.equal(ld[0].telephone, '+573007643274');
   const total = c.secciones.reduce((n, s) => n + s.productos.length, 0);
   assert.equal(ld[1].itemListElement.length, total);
-  assert.deepEqual(Object.keys(ld[1].itemListElement[0].item.offers).slice(0, 3), ['@type', 'price', 'priceCurrency']);
+  assert.match(ld[1].itemListElement[0].url, /^https:\/\/tienda\.example\/producto\/[a-z0-9-]+-\d+$/, 'la lista apunta a la página de cada producto');
+  assert.match(html, /<h3><a href="\/producto\/[a-z0-9-]+-\d+">/, 'el nombre de cada tarjeta lleva a su página');
 
   const tarjetas = html.match(/<li class="t-producto/g).length;
   assert.equal(tarjetas, total);
@@ -109,7 +110,11 @@ test('robots.txt deja ver la tienda y no el panel; el mapa del sitio apunta a la
   assert.match(robots, /Sitemap: https:\/\/tienda\.example\/sitemap\.xml/);
   const mapa = await responderTienda(new Request('https://tienda.example/sitemap.xml'));
   assert.equal(mapa.headers.get('content-type'), 'application/xml; charset=utf-8');
-  assert.match(await mapa.text(), /<loc>https:\/\/tienda\.example\/<\/loc>/);
+  const xml = await mapa.text();
+  assert.match(xml, /<loc>https:\/\/tienda\.example\/<\/loc>/);
+  const total = real.data.sections.reduce((n, s) => n + s.products.length, 0);
+  assert.equal((xml.match(/<loc>https:\/\/tienda\.example\/producto\//g) || []).length, total, 'cada producto en el mapa del sitio');
+  assert.match(xml, /<url><loc>https:\/\/tienda\.example\/producto\/hielo-en-cubo-3-kg-520<\/loc><lastmod>[\d-]+<\/lastmod><image:image><image:loc>https:\/\/trivo-pos\.com\/api\/media\//);
 });
 
 test('los avisos abren el panel, no la tienda', () => {
@@ -117,4 +122,39 @@ test('los avisos abren el panel, no la tienda', () => {
   assert.equal(enPanel('/#mitienda'), '/panel#mitienda');
   assert.equal(enPanel('/?q=aguila'), '/panel?q=aguila');
   assert.equal(enPanel('/panel#lista'), '/panel#lista');
+});
+
+test('cada producto tiene su página: título, precio, datos de producto para Google y migas', async () => {
+  olvidarMemoria();
+  const r = await responderTienda(new Request('https://tienda.example/producto/hielo-en-cubo-3-kg-520'));
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('netlify-cdn-cache-control'), /s-maxage=300/);
+  const html = await r.text();
+  assert.match(html, /<title>Hielo en cubo 3 kg a domicilio en Valledupar \| Agua Pure<\/title>/);
+  assert.match(html, /<meta name="description" content="Hielo en cubo 3 kg a \$ 5\.000 con domicilio en Valledupar\. /);
+  assert.match(html, /<link rel="canonical" href="https:\/\/tienda\.example\/producto\/hielo-en-cubo-3-kg-520">/);
+  assert.match(html, /<meta property="og:type" content="product">/);
+  assert.match(html, /<h1>Hielo en cubo 3 kg<\/h1>/);
+  const ld = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)].map((m) => JSON.parse(m[1]));
+  const producto = ld.find((d) => d['@type'] === 'Product');
+  assert.equal(producto.name, 'Hielo en cubo 3 kg');
+  assert.match(producto.image[0], /^https:\/\/trivo-pos\.com\//);
+  assert.deepEqual([producto.offers.price, producto.offers.priceCurrency, producto.offers.availability], [5000, 'COP', 'https://schema.org/InStock']);
+  assert.equal(producto.offers.url, 'https://tienda.example/producto/hielo-en-cubo-3-kg-520');
+  const migas = ld.find((d) => d['@type'] === 'BreadcrumbList');
+  assert.deepEqual(migas.itemListElement.map((x) => x.name), ['Inicio', 'Hielo', 'Hielo en cubo 3 kg']);
+  assert.match(html, /class="t-comprar t-grande" href="https:\/\/trivo-pos\.com\/m\/agua-pure"/);
+  assert.match(html, /class="t-wa t-grande" href="https:\/\/wa\.me\/573007643274\?text=/);
+  assert.match(html, /Más de hielo/, 'y otros productos de la misma sección, enlazados');
+  assert.ok(!html.includes('href="/producto/hielo-en-cubo-3-kg-520"'), 'sin enlazarse a sí misma');
+});
+
+test('dirección de producto: el nombre viejo redirige, el que ya no está da 404', async () => {
+  let r = await responderTienda(new Request('https://tienda.example/producto/hielo-viejo-520'));
+  assert.equal(r.status, 301);
+  assert.equal(r.headers.get('location'), 'https://tienda.example/producto/hielo-en-cubo-3-kg-520');
+  r = await responderTienda(new Request('https://tienda.example/producto/no-existe-99999'));
+  assert.equal(r.status, 404);
+  assert.match(await r.text(), /<meta name="robots" content="noindex">/);
+  assert.equal(rutaProducto({ id: 7, nombre: 'Caja Póker x 24 unidades (lata)' }), '/producto/caja-poker-x-24-unidades-lata-7');
 });

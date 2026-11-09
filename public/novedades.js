@@ -26,7 +26,7 @@ export const VERSIONES = [
       {
         titulo: 'Google en Valledupar',
         antes: 'Google no tenía qué mostrar: todo estaba detrás de la clave.',
-        ahora: 'La tienda tiene título y descripción para Valledupar, los datos del negocio y de cada producto para Google, y el mapa del sitio (sitemap.xml) listo para Google Search Console.',
+        ahora: 'Cada producto tiene su propia página (por ejemplo /producto/hielo-en-cubo-3-kg-520) con título, precio, foto y datos para Google, así que Google puede mostrar cada producto por separado. La tienda tiene título y descripción para Valledupar y el mapa del sitio (sitemap.xml) con todos los productos, listo para Google Search Console.',
       },
     ],
   },
