@@ -9,6 +9,28 @@ import { $, boton, el, guardado } from './util.js';
 
 export const VERSIONES = [
   {
+    version: '2.7',
+    fecha: '2026-11-09',
+    titulo: 'La página principal es la tienda; esta app es el panel',
+    cambios: [
+      {
+        titulo: 'Tienda pública en la página principal',
+        antes: 'La dirección principal pedía la clave y mostraba el comparador.',
+        ahora: 'La dirección principal es la tienda de Agua Pure, sin clave: los productos de la carta de TRIVO en tarjetas con foto y precio, «Comprar» (abre la carta de TRIVO para hacer el pedido) y «Pedir» (abre WhatsApp con el producto escrito). Los precios y las fotos salen de TRIVO: lo que cambies allá se ve aquí en unos minutos.',
+      },
+      {
+        titulo: 'El panel quedó en /panel',
+        antes: 'La app se abría en la dirección principal.',
+        ahora: 'Esta app (comparador, Mi tienda, avisos…) está en /panel, con la misma clave. La app instalada en el teléfono y los enlaces de los avisos abren el panel solos. Google no lo muestra.',
+      },
+      {
+        titulo: 'Google en Valledupar',
+        antes: 'Google no tenía qué mostrar: todo estaba detrás de la clave.',
+        ahora: 'La tienda tiene título y descripción para Valledupar, los datos del negocio y de cada producto para Google, y el mapa del sitio (sitemap.xml) listo para Google Search Console.',
+      },
+    ],
+  },
+  {
     version: '2.6',
     fecha: '2026-11-02',
     titulo: 'Hoy, y los precios se aprueban desde WhatsApp',

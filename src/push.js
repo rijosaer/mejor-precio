@@ -70,7 +70,7 @@ export async function enviar(notificacion) {
   await Promise.all(
     lista.map(async (s) => {
       try {
-        await wp.sendNotification(s, JSON.stringify(notificacion), { TTL: 12 * 60 * 60, timeout: 8000 });
+        await wp.sendNotification(s, JSON.stringify({ ...notificacion, url: enPanel(notificacion.url || '/') }), { TTL: 12 * 60 * 60, timeout: 8000 });
         enviadas++;
       } catch (error) {
         if (error.statusCode === 404 || error.statusCode === 410) vencidas.push(s.endpoint);
@@ -118,10 +118,14 @@ export function textoAviso(a) {
   }
 }
 
-// Enlace a la app en el mensaje de WhatsApp (Netlify define URL; si no, APP_URL).
+// Los avisos abren el panel: «/#mitienda» → «/panel#mitienda». La página
+// principal es la tienda pública.
+export const enPanel = (ruta = '/') => (ruta.startsWith('/panel') ? ruta : `/panel${ruta.replace(/^\/+/, '')}`);
+
+// Enlace al panel en el mensaje de WhatsApp (Netlify define URL; si no, APP_URL).
 function enlace(ruta = '/') {
   const base = process.env.APP_URL || process.env.URL || '';
-  return base ? `${base.replace(/\/$/, '')}${ruta}` : '';
+  return base ? `${base.replace(/\/$/, '')}${enPanel(ruta)}` : '';
 }
 
 // ── Mensaje de WhatsApp ─────────────────────────────────────────────────────

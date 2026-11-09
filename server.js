@@ -1,11 +1,13 @@
-// Servidor local (o en Railway): sirve public/ y pasa /api/* a src/api.js.
-// En Netlify no se usa: allí public/ es sitio estático y la API es una función.
+// Servidor local (o en Railway): la tienda pública en «/» (src/tienda.js), el
+// panel en /panel, el resto de public/ y /api/* a src/api.js. En Netlify no se
+// usa: allí public/ es sitio estático y la tienda y la API son funciones.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { manejarApi } from './src/api.js';
 import { revisar } from './src/monitor.js';
+import { responderTienda } from './src/tienda.js';
 
 const PUERTO = Number(process.env.PORT) || 3000;
 const CARPETA_PUBLICA = join(fileURLToPath(new URL('.', import.meta.url)), 'public');
@@ -55,14 +57,7 @@ async function leerCuerpo(req) {
   return Buffer.concat(partes);
 }
 
-async function pasarApi(req, res) {
-  const sinCuerpo = req.method === 'GET' || req.method === 'HEAD';
-  const request = new Request(new URL(req.url, `http://${req.headers.host || 'localhost'}`), {
-    method: req.method,
-    headers: Object.entries(req.headers).filter(([, v]) => typeof v === 'string'),
-    body: sinCuerpo ? undefined : await leerCuerpo(req),
-  });
-  const respuesta = await manejarApi(request, { ip: ipDe(req), https: req.headers['x-forwarded-proto'] === 'https' });
+async function responder(res, respuesta) {
   const encabezados = Object.fromEntries(respuesta.headers);
   const cookies = respuesta.headers.getSetCookie();
   if (cookies.length) encabezados['set-cookie'] = cookies;
@@ -70,8 +65,18 @@ async function pasarApi(req, res) {
   res.end(Buffer.from(await respuesta.arrayBuffer()));
 }
 
+async function pasarApi(req, res) {
+  const sinCuerpo = req.method === 'GET' || req.method === 'HEAD';
+  const request = new Request(new URL(req.url, `http://${req.headers.host || 'localhost'}`), {
+    method: req.method,
+    headers: Object.entries(req.headers).filter(([, v]) => typeof v === 'string'),
+    body: sinCuerpo ? undefined : await leerCuerpo(req),
+  });
+  await responder(res, await manejarApi(request, { ip: ipDe(req), https: req.headers['x-forwarded-proto'] === 'https' }));
+}
+
 async function servirArchivo(res, ruta) {
-  const relativa = ruta === '/' ? 'index.html' : decodeURIComponent(ruta).replace(/^\/+/, '');
+  const relativa = ruta === '/panel' ? 'panel.html' : decodeURIComponent(ruta).replace(/^\/+/, '');
   const completa = normalize(join(CARPETA_PUBLICA, relativa));
   const noEncontrado = () => {
     res.writeHead(404, { ...SEGURIDAD, 'content-type': 'text/plain; charset=utf-8' });
@@ -94,6 +99,9 @@ const servidor = createServer(async (req, res) => {
   try {
     const { pathname } = new URL(req.url, 'http://localhost');
     if (pathname.startsWith('/api/')) return await pasarApi(req, res);
+    if (req.method === 'GET' && ['/', '/robots.txt', '/sitemap.xml'].includes(pathname)) {
+      return await responder(res, await responderTienda(new Request(new URL(req.url, `http://${req.headers.host || 'localhost'}`))));
+    }
     if (req.method === 'GET') return await servirArchivo(res, pathname);
     res.writeHead(405, SEGURIDAD);
     res.end();
@@ -104,7 +112,7 @@ const servidor = createServer(async (req, res) => {
   }
 });
 
-servidor.listen(PUERTO, () => console.log(`Mejor Precio escuchando en http://localhost:${PUERTO}`));
+servidor.listen(PUERTO, () => console.log(`Mejor Precio: tienda en http://localhost:${PUERTO}/ y panel en http://localhost:${PUERTO}/panel`));
 
 // Igual que la función programada de Netlify: cada hora revisa "Mi lista".
 const revisarLista = () =>

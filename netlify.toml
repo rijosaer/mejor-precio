@@ -13,6 +13,23 @@
     X-Frame-Options = "DENY"
     Content-Security-Policy = "default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'"
 
+# El panel administrativo (la app con clave). La página principal es la
+# tienda pública: la arma la función netlify/functions/tienda.mjs.
+[[redirects]]
+  from = "/panel/"
+  to = "/panel"
+  status = 301
+
+[[redirects]]
+  from = "/panel"
+  to = "/panel.html"
+  status = 200
+
+[[headers]]
+  for = "/panel*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
 [[headers]]
   for = "/sw.js"
   [headers.values]

@@ -1,11 +1,12 @@
-// Guarda la pantalla de la app para que abra rápido; los precios siempre se
-// piden al servidor (nunca se muestran precios guardados como si fueran nuevos).
+// Guarda la pantalla del panel (/panel) para que abra rápido; los precios
+// siempre se piden al servidor (nunca se muestran precios guardados como si
+// fueran nuevos). La página principal es la tienda pública: no se guarda aparte.
 // También recibe las notificaciones push del monitoreo.
 // Debe ser `mp-` + la versión más reciente de public/novedades.js.
-const VERSION = 'mp-2.6';
+const VERSION = 'mp-2.7';
 const ARCHIVOS = [
-  './',
-  'index.html',
+  'panel',
+  'panel.html',
   'styles.css',
   'app.js',
   'ajustes.js',
@@ -62,7 +63,7 @@ self.addEventListener('fetch', (e) => {
         }
         return res;
       })
-      .catch(async () => (await caches.match(e.request, { ignoreSearch: true })) || (await caches.match('index.html')) || Response.error()),
+      .catch(async () => (await caches.match(e.request, { ignoreSearch: true })) || (url.pathname.startsWith('/panel') && (await caches.match('panel.html'))) || Response.error()),
   );
 });
 
@@ -80,18 +81,19 @@ self.addEventListener('push', (e) => {
       icon: 'icons/icon-192.png',
       badge: 'icons/icon-192.png',
       tag: datos.tag || undefined,
-      data: { url: datos.url || '/' },
+      data: { url: datos.url || '/panel' },
     }),
   );
 });
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const destino = new URL(e.notification.data?.url || '/', self.location.origin);
+  const destino = new URL(e.notification.data?.url || '/panel', self.location.origin);
   e.waitUntil(
     (async () => {
       const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      const abierta = ventanas.find((v) => new URL(v.url).origin === destino.origin);
+      // Solo una ventana del panel sabe abrir la vista; la tienda pública no.
+      const abierta = ventanas.find((v) => new URL(v.url).origin === destino.origin && new URL(v.url).pathname.startsWith('/panel'));
       if (abierta) {
         await abierta.focus();
         const q = destino.searchParams.get('q');

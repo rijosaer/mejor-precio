@@ -5,8 +5,8 @@
 import { pedir } from '../http.js';
 import { coincideBusqueda, extraerMl, extraerUnidades, palabrasClave, repararNombre, urlSegura } from '../normalizar.js';
 
-const BASE = 'https://trivo-pos.com';
-const SLUG = 'agua-pure';
+export const BASE = 'https://trivo-pos.com';
+export const SLUG = 'agua-pure';
 
 export const tienda = { id: 'aguapure', nombre: 'Agua Pure', web: `${BASE}/m/${SLUG}`, alcance: 'Domicilio en Valledupar' };
 

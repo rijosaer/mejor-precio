@@ -113,9 +113,10 @@ El cashback es un porcentaje por tienda (por ejemplo 2 % en Rappi) que se suma a
 
 ```
 mejor-precio/
-├─ server.js                 Servidor local/Railway: estáticos + API + monitoreo cada hora
-├─ netlify/functions/        api.mjs (la API) y monitor.mjs (función programada cada hora)
+├─ server.js                 Servidor local/Railway: tienda en «/», panel en /panel, API y monitoreo cada hora
+├─ netlify/functions/        tienda.mjs (página principal), api.mjs (la API) y monitor.mjs (cada hora)
 ├─ src/
+│  ├─ tienda.js              Tienda pública: carta de TRIVO → HTML con SEO, robots.txt y sitemap.xml
 │  ├─ api.js                 Rutas /api/*: sesión, búsqueda, lista, push, inventario, proveedores…
 │  ├─ comparador.js          Consulta las tiendas en paralelo, caché por tienda, estadísticas
 │  ├─ normalizar.js          Tamaños, unidades, grados, coincidencia de palabras, variantes, firma
@@ -127,7 +128,8 @@ mejor-precio/
 │  ├─ inventario.js          Compras, ventas y conteos
 │  └─ almacen.js             Netlify Blobs o archivos en datos/; `actualizar` sin pisarse
 └─ public/
-   ├─ index.html · styles.css  Estructura, plantillas y diseño (claro y oscuro)
+   ├─ tienda.css · tienda.js  Diseño y buscador de la tienda pública (página principal)
+   ├─ panel.html · styles.css  El panel (/panel): estructura, plantillas y diseño (claro y oscuro)
    ├─ app.js                 Arranque, navegación, búsqueda y autocompletar
    ├─ resultados.js          Grupos, filas con foto, ficha, filtros, avisos, precio por litro
    ├─ lista.js · catalogo.js · pedido.js · ventas.js · proveedores.js · ajustes.js · estado.js
@@ -387,3 +389,13 @@ No hay plantillas ni ventana de 24 horas: siempre se manda texto. Es una conexi�
 6. El dueño puede escribirle «hola» al número de la empresa: durante 24 horas los avisos salen como texto normal.
 
 Rutas: `GET/PUT /api/whatsapp` (número y encendido), `POST /api/whatsapp/probar`.
+
+## 17. Tienda pública (página principal) y panel
+
+Desde la versión 2.7 la dirección principal es la **tienda de Agua Pure, sin clave**, y esta app es el **panel administrativo en `/panel`** (misma clave, misma sesión).
+
+- **De dónde salen los productos:** de la carta pública de TRIVO (`/api/public/menu/agua-pure/`), con su orden de secciones, sin lo que se ocultó en TRIVO y con lo destacado primero. Los nombres se ven sin el relleno para el buscador de TRIVO («valledupar», «agua pure»). Para cambiar un precio, una foto o el orden: se cambia en TRIVO y la tienda lo muestra en unos 5 minutos.
+- **Botones de cada producto:** «Comprar» abre la carta de TRIVO, donde el cliente arma el carrito y envía el pedido (TRIVO lo recibe y lo pasa al WhatsApp configurado en la carta; el pago es contra entrega con los medios que tenga la carta). La carta de TRIVO no permite enlazar a un producto suelto, por eso abre la carta completa. «Pedir» abre WhatsApp con el número de la carta y el producto ya escrito.
+- **Google:** el HTML se arma en el servidor (`src/tienda.js`) con título y descripción de Valledupar, `canonical`, Open Graph y datos estructurados (`LiquorStore` con dirección, teléfono, horario y medios de pago, e `ItemList` de productos con precio y disponibilidad). `/robots.txt` deja ver la tienda y no `/panel` ni `/api/`; `/sitemap.xml` lista la página principal. Falta un paso manual: dar de alta el sitio en Google Search Console y enviar el sitemap.
+- **Velocidad y caídas:** la CDN de Netlify guarda la página 5 minutos y la sigue sirviendo mientras refresca. La última carta buena queda en Blobs (`tienda-carta`): si TRIVO no responde, la página sale con esos precios y un aviso. Si nunca cargó, responde 503 con un enlace a la carta de TRIVO.
+- **Panel:** `/panel` no se indexa (`noindex` y `X-Robots-Tag`). La app instalada y los enlaces viejos de los avisos (`/#mitienda`, `/?q=…`) pasan solos a `/panel`; los avisos nuevos ya enlazan a `/panel`.

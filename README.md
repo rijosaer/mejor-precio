@@ -1,6 +1,8 @@
 # Mejor Precio
 
-App web instalable en el teléfono que busca un producto en **Bevgo, Dislicores, Éxito, Makro, Olímpica, Agua Pure, D1 y tus proveedores propios** (más Carulla y Jumbo si las activas) y muestra cuál lo tiene más barato, agrupado por presentación (750 ml, 6 × 330 ml…). Es para uso privado de una o dos personas y se protege con una contraseña.
+App web instalable en el teléfono que busca un producto en **Bevgo, Dislicores, Éxito, Makro, Olímpica, Agua Pure, D1 y tus proveedores propios** (más Carulla y Jumbo si las activas) y muestra cuál lo tiene más barato, agrupado por presentación (750 ml, 6 × 330 ml…). Es para uso privado de una o dos personas y se protege con una contraseña: vive en **`/panel`**.
+
+La página principal (`/`) es la **tienda pública de Agua Pure**, sin clave: los productos de su carta en TRIVO con foto y precio, «Comprar» hacia la carta de TRIVO y «Pedir» por WhatsApp, con SEO para Valledupar (ver docs/como-funciona.md §17).
 
 ## Qué precio muestra cada tienda
 
@@ -57,7 +59,7 @@ Requiere Node.js 20 o superior. Instala la única dependencia con `npm install` 
 
 ```bash
 APP_PASSWORD=una-clave SESSION_SECRET=texto-largo-aleatorio npm start
-# abre http://localhost:3000
+# tienda: http://localhost:3000 · panel: http://localhost:3000/panel
 ```
 
 En PowerShell:
@@ -112,7 +114,7 @@ Diferencias con el servidor propio: cada búsqueda tiene 10 segundos (cada tiend
 2. En Railway: **New Project → Deploy from GitHub repo** y elige el repositorio. Railway detecta Node y usa `npm start`.
 3. En **Variables** agrega `APP_PASSWORD` y `SESSION_SECRET` (y, para Mi tienda con TRIVO, `TRIVO_USUARIO` y `TRIVO_CLAVE`; para los avisos por WhatsApp, `WHATSAPP_TOKEN` y `WHATSAPP_PHONE_ID`, ver docs/como-funciona.md §16).
 4. En **Settings → Networking** genera un dominio público.
-5. Abre ese enlace en el teléfono, entra con la contraseña y en el menú del navegador elige **Agregar a pantalla de inicio** (Android) o **Compartir → Agregar a inicio** (iPhone).
+5. Abre ese enlace + `/panel` en el teléfono, entra con la contraseña y en el menú del navegador elige **Agregar a pantalla de inicio** (Android) o **Compartir → Agregar a inicio** (iPhone).
 
 ## Publicar una actualización
 
@@ -133,7 +135,7 @@ Cada tienda está en su propio archivo en `src/tiendas/`. Si una cambia su pági
 ## Estructura
 
 ```
-server.js              servidor: contraseña, API, archivos de la app y monitoreo cada hora
+server.js              servidor: tienda en «/», panel en /panel (contraseña), API y monitoreo cada hora
 src/api.js             rutas /api/* (las comparte la función de Netlify)
 src/comparador.js      consulta las tiendas en paralelo, caché por tienda y estadísticas
 src/normalizar.js      tamaños, unidades, grados, coincidencia de palabras, variantes y firma

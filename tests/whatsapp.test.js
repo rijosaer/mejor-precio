@@ -103,7 +103,7 @@ test('todos los avisos llegan en un solo mensaje con el enlace a la app', async 
   assert.match(texto, /^\*Mejor Precio\* · lun, 2 de nov, 12:00 p\. ?m\.\n💲 precios por aprobar · 📦 1 por pedir · 🏷️ 1 para comprar · 🛠️ 1 de conexión\n/);
   // En orden de urgencia: aprobar, pedir, comprar, conexiones.
   assert.ok(texto.indexOf('Precios por aprobar') < texto.indexOf('Por pedir') && texto.indexOf('Por pedir') < texto.indexOf('Para comprar') && texto.indexOf('Para comprar') < texto.indexOf('Conexiones'));
-  assert.match(texto, /• Compra en TRIVO: 2 precios para aprobar\n {3}Aguila: \$3\.500 → \$3\.300\n↳ https:\/\/mejor-precio\.example\/#mitienda/);
+  assert.match(texto, /• Compra en TRIVO: 2 precios para aprobar\n {3}Aguila: \$3\.500 → \$3\.300\n↳ https:\/\/mejor-precio\.example\/panel#mitienda/, 'los enlaces abren el panel, no la tienda pública');
   assert.match(texto, /• Hielo 3 kg — quedan 4/);
   assert.match(texto, /• Aguila 330\n {3}Makro \*\$\s2\.900\* \(bajó de \$\s3\.300\)/);
   assert.match(texto, /Éxito no está respondiendo[\s\S]*#estado$/);
