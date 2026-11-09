@@ -107,7 +107,7 @@ export function armarCarta(datos, { t = Date.now() } = {}) {
         .filter((p) => p.nombre && p.precio > 0)
         .sort((a, b) => (tema.sections?.featuredFirst !== false ? b.destacado - a.destacado : 0) || a.i - b.i)
         .map(({ i: _i, ...p }) => p);
-      return { id: slug(nombre), nombre, productos };
+      return { id: slug(nombre), nombre, imagen: absoluta(s.image_url), productos };
     })
     .filter((s) => s.productos.length);
 
@@ -180,20 +180,24 @@ function buscarProducto(carta, id) {
   return null;
 }
 
+// La identidad es la de la carta de Agua Pure en TRIVO: encabezado azul con la
+// tarjeta de domicilios, hoja blanca, Manrope en los títulos e Inter en el texto,
+// fichas de categoría con foto y productos sobre fondo gris claro.
 const ICONOS = {
-  chat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.7-1.2A9 9 0 1 0 12 3Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
-  bolsa: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8Zm3 0V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
-  pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="9" r="2.5" fill="currentColor"/></svg>',
-  gota: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 6C17 16 12 22.5 12 29a12 12 0 0 0 24 0c0-6.5-5-13-12-23Z" fill="currentColor"/></svg>',
-  hielo: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 6 39 14.5v19L24 42 9 33.5v-19L24 6Zm0 0v17m0 0 15-8.5M24 23 9 14.5M24 23v19" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>',
-  lata: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M16 8h16l2 4v26l-2 3H16l-2-3V12l2-4Z" fill="currentColor"/><path d="M14 17h20M14 33h20" stroke="#fff" stroke-opacity=".5" stroke-width="2"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-4.5 3.5V17.5H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="8.5" cy="11.5" r="1.1" fill="currentColor"/><circle cx="12" cy="11.5" r="1.1" fill="currentColor"/><circle cx="15.5" cy="11.5" r="1.1" fill="currentColor"/></svg>',
+  bolsa: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8Zm3 0V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12Z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="9" r="2.3" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+  flecha: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  inicio: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20h-5.5v-5h-5v5H4v-9.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+  catalogo: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+  instagram: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16.8" cy="7.3" r="1" fill="currentColor"/></svg>',
+  destello: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c.6 4.6 4.4 8.4 9 9-4.6.6-8.4 4.4-9 9-.6-4.6-4.4-8.4-9-9 4.6-.6 8.4-4.4 9-9Z" fill="currentColor"/></svg>',
 };
 
-const iconoDe = (seccion) => (/hielo/i.test(seccion) && !/cerve|caja|cab/i.test(seccion) ? 'hielo' : /agua/i.test(seccion) ? 'gota' : 'lata');
+const sinFoto = () => `<span class="t-sinfoto">${ICONOS.destello}</span>`;
 
-const sinFoto = (seccion) => `<div class="t-sinfoto t-sinfoto-${iconoDe(seccion.nombre)}">${ICONOS[iconoDe(seccion.nombre)]}</div>`;
-
-const precioHtml = (p) => `${p.desde ? '<span class="t-desde">Desde</span> ' : ''}<strong>${precioTexto(p.precio)}</strong>${p.antes ? ` <s>${precioTexto(p.antes)}</s>` : ''}`;
+const precioHtml = (p) =>
+  `${p.desde ? '<small class="t-desde">Desde</small>' : ''}<strong>${precioTexto(p.precio)}</strong><span>/ presentación</span>${p.antes ? `<del>${precioTexto(p.antes)}</del>` : ''}`;
 
 function botonesCompra(p, carta, grande = false) {
   if (!p.disponible) return '<span class="t-agotado">Agotado por ahora</span>';
@@ -209,16 +213,15 @@ function botonesCompra(p, carta, grande = false) {
 function tarjeta(p, seccion, carta, pendientes) {
   const ruta = rutaProducto(p);
   const foto = p.imagen
-    ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" width="400" height="300" ${pendientes.fotos-- > 0 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`
-    : sinFoto(seccion);
+    ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" width="400" height="400" ${pendientes.fotos-- > 0 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`
+    : sinFoto();
+  const cinta = p.antes ? '<span class="t-cinta">Promo</span>' : p.destacado ? '<span class="t-cinta">Destacado</span>' : '';
   return `<li class="t-producto${p.disponible ? '' : ' t-no'}" id="producto-${esc(p.id)}" data-buscar="${esc(`${p.nombre} ${seccion.nombre}`)}">
-  <a class="t-foto-enlace" href="${esc(ruta)}" tabindex="-1" aria-hidden="true"><figure class="t-foto">${foto}${p.antes ? '<span class="t-cinta">Promo</span>' : p.destacado ? '<span class="t-cinta">Destacado</span>' : ''}</figure></a>
-  <div class="t-info">
-    <h3><a href="${esc(ruta)}">${esc(p.nombre)}</a></h3>
-    ${p.descripcion ? `<p class="t-desc">${esc(p.descripcion)}</p>` : ''}
-    <p class="t-precio">${precioHtml(p)}</p>
-    <div class="t-botones">${botonesCompra(p, carta)}</div>
-  </div>
+  <a class="t-arte" href="${esc(ruta)}" tabindex="-1" aria-hidden="true"><span class="t-etiqueta">${esc(seccion.nombre)}</span>${cinta}${foto}</a>
+  <p class="t-precio">${precioHtml(p)}</p>
+  <h3><a href="${esc(ruta)}">${esc(p.nombre)}</a></h3>
+  ${p.descripcion ? `<p class="t-desc">${esc(p.descripcion)}</p>` : ''}
+  <div class="t-botones">${botonesCompra(p, carta)}</div>
 </li>`;
 }
 
@@ -326,7 +329,7 @@ function cabeza(carta, { titulo, descripcion, canonica, imagen, tipo = 'website'
 <meta name="description" content="${esc(descripcion)}">
 ${canonica ? `<link rel="canonical" href="${esc(canonica)}">` : ''}
 <meta name="robots" content="${robots}">
-<meta name="theme-color" content="#102c3f">
+<meta name="theme-color" content="#0369a1">
 <meta name="color-scheme" content="light">
 <meta name="geo.region" content="CO-CES">
 <meta name="geo.placename" content="${esc(carta.ciudad)}">
@@ -338,7 +341,8 @@ ${canonica ? `<link rel="canonical" href="${esc(canonica)}">` : ''}
 ${canonica ? `<meta property="og:url" content="${esc(canonica)}">` : ''}
 ${imagen ? `<meta property="og:image" content="${esc(imagen)}">\n<meta name="twitter:card" content="summary_large_image">` : ''}
 ${carta.logo ? `<link rel="icon" href="${esc(carta.logo)}">\n<link rel="apple-touch-icon" href="${esc(carta.logo)}">` : '<link rel="icon" href="/icons/icon-192.png" type="image/png">'}
-<link rel="preload" href="/fuentes/montserrat-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fuentes/manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fuentes/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/tienda.css">
 ${datos}
 <script src="/tienda.js" type="module"></script>
@@ -348,41 +352,56 @@ ${datos}
 
 const whatsappGeneral = (carta) => enlaceWhatsapp(carta.whatsapp, `Hola ${carta.marca}, quiero hacer un pedido a domicilio en ${carta.ciudad}.`);
 
-function barra(carta) {
+// Encabezado azul: marca, «¿Te ayudamos?» y la tarjeta de domicilios.
+function cabecera(carta) {
   const wa = whatsappGeneral(carta);
-  return `<header class="t-barra">
-  <div class="t-ancho t-barra-dentro">
+  const cobertura = enlaceWhatsapp(carta.whatsapp, `Hola ${carta.marca}, quiero consultar la cobertura de domicilios en ${carta.ciudad}.`);
+  return `<a class="t-saltar" href="#contenido">Ir al contenido</a>
+<header class="t-cabecera" id="inicio">
+  <div class="t-ancho t-cabecera-fila">
     <a class="t-marca" href="/" aria-label="${esc(carta.marca)}, inicio">
-      ${carta.logo ? `<img src="${esc(carta.logo)}" alt="" width="44" height="44">` : ''}
+      ${carta.logo ? `<img src="${esc(carta.logo)}" alt="" width="56" height="56">` : ''}
       <span>${esc(carta.marca)}<small>Ice &amp; bebidas</small></span>
     </a>
     ${wa ? `<a class="t-ayuda" href="${esc(wa)}" target="_blank" rel="noopener">${ICONOS.chat}<span>¿Te ayudamos?</span></a>` : ''}
+  </div>
+  <div class="t-ancho">
+    <div class="t-entrega">
+      ${ICONOS.pin}
+      <div><span>Domicilios en</span><strong>${esc(carta.ciudad)}, Cesar</strong></div>
+      ${cobertura ? `<a href="${esc(cobertura)}" target="_blank" rel="noopener">Consultar ${ICONOS.flecha}</a>` : ''}
+    </div>
   </div>
 </header>`;
 }
 
 function pie(carta) {
+  const wa = whatsappGeneral(carta);
   return `<footer class="t-pie">
-  <div class="t-ancho">
-    <p><b>${esc(carta.marca)}</b> · Domicilios en ${esc(carta.ciudad)}, Cesar${carta.direccion ? ` · ${esc(carta.direccion)}` : ''}</p>
+    <p class="t-pie-marca">${esc(carta.marca)}</p>
+    ${carta.lema ? `<p class="t-pie-lema">${esc(carta.lema)}</p>` : ''}
+    <p>Domicilios en ${esc(carta.ciudad)}, Cesar${carta.direccion ? ` · ${esc(carta.direccion)}` : ''}${carta.telefono ? ` · <a href="tel:+57${esc(carta.telefono)}">${esc(telefonoTexto(carta.telefono))}</a>` : ''}</p>
     ${carta.pedidos.nota ? `<p>${esc(carta.pedidos.nota)}</p>` : ''}
-    <p>${carta.telefono ? `Teléfono y WhatsApp: <a href="tel:+57${esc(carta.telefono)}">${esc(telefonoTexto(carta.telefono))}</a>` : ''}${carta.instagram ? ` · <a href="${esc(carta.instagram)}" target="_blank" rel="noopener">Instagram</a>` : ''} · <a href="${CARTA}" target="_blank" rel="noopener">Nuestra carta en TRIVO</a></p>
-    <p class="t-fecha">Precios en pesos colombianos (actualizados el ${esc(fechaTexto(carta.t))}). La venta de bebidas alcohólicas es solo para mayores de edad. El exceso de alcohol es perjudicial para la salud.</p>
-  </div>
-</footer>
+    <p><a href="${CARTA}" target="_blank" rel="noopener">Nuestra carta en TRIVO</a>${carta.instagram ? ` · <a href="${esc(carta.instagram)}" target="_blank" rel="noopener">Instagram</a>` : ''}</p>
+    <p class="t-pie-nota">Precios en pesos colombianos (actualizados el ${esc(fechaTexto(carta.t))}). La venta de bebidas alcohólicas es solo para mayores de edad. El exceso de alcohol es perjudicial para la salud.</p>
+  </footer>
+</div>
+</main>
+<nav class="t-barra-inferior" aria-label="Accesos">
+  <a href="/#inicio" class="t-activo">${ICONOS.inicio}<span>Inicio</span></a>
+  <a href="/#categorias">${ICONOS.catalogo}<span>Catálogo</span></a>
+  ${carta.instagram ? `<a href="${esc(carta.instagram)}" target="_blank" rel="noopener">${ICONOS.instagram}<span>Instagram</span></a>` : ''}
+  ${wa ? `<a href="${esc(wa)}" target="_blank" rel="noopener" class="t-activo t-fuerte">${ICONOS.chat}<span>Pedir por WhatsApp</span></a>` : ''}
+</nav>
 </body>
 </html>`;
 }
 
 function chipsPedido(carta) {
   return [
-    `${ICONOS.pin}<span>Domicilios en <b>${esc(carta.ciudad)}</b></span>`,
-    carta.pedidos.minimo ? `<span>Pedido mínimo <b>${precioTexto(carta.pedidos.minimo)}</b></span>` : '',
-    carta.pedidos.pagos.length ? `<span>Pagas con <b>${esc(carta.pedidos.pagos.join(' o '))}</b></span>` : '',
-  ]
-    .filter(Boolean)
-    .map((c) => `<li>${c}</li>`)
-    .join('');
+    carta.pedidos.minimo ? `<li>Pedido mínimo <b>${precioTexto(carta.pedidos.minimo)}</b></li>` : '',
+    carta.pedidos.pagos.length ? `<li>Pagas con <b>${esc(carta.pedidos.pagos.join(' o '))}</b></li>` : '',
+  ].join('');
 }
 
 const avisoViejo = (carta) => (carta.vieja ? '<p class="t-aviso">Estos precios son de la última vez que cargó nuestra carta. Confirma el precio al pedir.</p>' : '');
@@ -390,11 +409,17 @@ const avisoViejo = (carta) => (carta.vieja ? '<p class="t-aviso">Estos precios s
 export function paginaHtml(carta, { base }) {
   const { titulo, descripcion, enLista } = textosSeo(carta);
   const wa = whatsappGeneral(carta);
+  const total = carta.secciones.reduce((n, s) => n + s.productos.length, 0);
   const pendientes = { fotos: 4 };
+  const categorias = carta.secciones
+    .map(
+      (s) => `<li><a class="t-categoria" href="#${esc(s.id)}"><span class="t-ficha-cat">${s.imagen ? `<img src="${esc(s.imagen)}" alt="" width="140" height="140" loading="lazy">` : sinFoto()}</span><strong>${esc(s.nombre)}</strong><small>Ver productos</small></a></li>`,
+    )
+    .join('');
   const secciones = carta.secciones
     .map(
       (s) => `<section class="t-seccion" id="${esc(s.id)}" aria-labelledby="t-${esc(s.id)}">
-<h2 id="t-${esc(s.id)}">${esc(s.nombre)} <small>${s.productos.length}</small></h2>
+<div class="t-encabezado"><div><span class="t-ceja">Tu próximo buen momento</span><h2 id="t-${esc(s.id)}">Explora ${esc(s.nombre)}</h2></div><span class="t-cuenta">${s.productos.length} ${s.productos.length === 1 ? 'producto' : 'productos'}</span></div>
 <ul class="t-rejilla">
 ${s.productos.map((p) => tarjeta(p, s, carta, pendientes)).join('\n')}
 </ul>
@@ -403,36 +428,30 @@ ${s.productos.map((p) => tarjeta(p, s, carta, pendientes)).join('\n')}
     .join('\n');
 
   return `${cabeza(carta, { titulo, descripcion, canonica: `${base}/`, imagen: carta.portada, datos: ld(negocioLd(carta, base), catalogoLd(carta, base)) })}
-<a class="t-saltar" href="#productos">Ir a los productos</a>
-${barra(carta)}
-
-<section class="t-portada">
-  ${carta.portada ? `<img class="t-portada-foto" src="${esc(carta.portada)}" alt="" width="1536" height="1024" fetchpriority="high">` : ''}
-  <div class="t-ancho t-portada-texto">
+${cabecera(carta)}
+<main class="t-hoja" id="contenido">
+<div class="t-ancho">
+  <section class="t-intro">
+    <span class="t-ceja">${esc(carta.marca)} · ${esc(carta.ciudad)}</span>
     <h1>${esc(mayuscula(enLista))} a domicilio en ${esc(carta.ciudad)}</h1>
-    <p>${esc(carta.lema || 'Bebidas frías a tu puerta.')}</p>
+    ${carta.lema ? `<p>${esc(carta.lema)}</p>` : ''}
     <ul class="t-chips">${chipsPedido(carta)}</ul>
-    <div class="t-portada-botones">
-      <a class="t-comprar t-grande" href="#productos">Ver productos</a>
-      ${wa ? `<a class="t-wa t-grande" href="${esc(wa)}" target="_blank" rel="noopener">${ICONOS.chat}<span>Pedir por WhatsApp</span></a>` : ''}
-    </div>
-  </div>
-</section>
+  </section>
+  ${wa ? `<a class="t-pregunta" href="${esc(wa)}" target="_blank" rel="noopener">${ICONOS.chat}<span><strong>¿Qué te gustaría hoy?</strong><small>Cuéntanos por WhatsApp</small></span>${ICONOS.flecha}</a>` : ''}
 
-<nav class="t-secciones" aria-label="Secciones">
-  <div class="t-ancho t-secciones-dentro">
-    <ul>${carta.secciones.map((s) => `<li><a href="#${esc(s.id)}">${esc(s.nombre)}</a></li>`).join('')}</ul>
+  <section class="t-planes" id="categorias" aria-labelledby="t-planes">
+    <div class="t-encabezado"><h2 id="t-planes">Para todos tus planes</h2><span class="t-ceja">${esc(carta.marca)} Ice</span></div>
+    <ul class="t-categorias">${categorias}</ul>
+  </section>
+
+  <div class="t-filtro">
+    <p class="t-total">${total} productos</p>
     <label class="t-buscar" hidden><span class="t-oculto">Buscar un producto</span><input type="search" placeholder="Buscar: Aguila, hielo, six pack…" autocomplete="off"></label>
   </div>
-</nav>
-
-<main id="productos" class="t-ancho">
-${avisoViejo(carta)}
-${secciones}
-<p class="t-vacio" hidden>No encontramos ese producto. ${wa ? `<a href="${esc(wa)}" target="_blank" rel="noopener">Pregúntanos por WhatsApp</a>.` : ''}</p>
-</main>
-
-${pie(carta)}`;
+  ${avisoViejo(carta)}
+  ${secciones}
+  <p class="t-vacio" hidden>No encontramos ese producto. ${wa ? `<a href="${esc(wa)}" target="_blank" rel="noopener">Pregúntanos por WhatsApp</a>.` : ''}</p>
+  ${pie(carta)}`;
 }
 
 // La página de un producto: foto grande, precio, cómo pedirlo y otros de su sección.
@@ -448,44 +467,45 @@ export function paginaProducto(carta, p, seccion, { base }) {
     tipo: 'product',
     datos: ld(...productoLd(p, seccion, carta, base)),
   })}
-${barra(carta)}
-<nav class="t-ancho t-migas" aria-label="Estás en">
-  <ol><li><a href="/">Inicio</a></li><li><a href="/#${esc(seccion.id)}">${esc(seccion.nombre)}</a></li><li aria-current="page">${esc(p.nombre)}</li></ol>
-</nav>
-<main class="t-ancho">
-${avisoViejo(carta)}
-<article class="t-ficha${p.disponible ? '' : ' t-no'}">
-  <figure class="t-ficha-foto">${p.imagen ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" width="800" height="600" fetchpriority="high">` : sinFoto(seccion)}</figure>
-  <div class="t-ficha-info">
-    <p class="t-ficha-seccion">${esc(seccion.nombre)}</p>
-    <h1>${esc(p.nombre)}</h1>
-    <p class="t-precio t-ficha-precio">${precioHtml(p)}</p>
-    <p class="t-ficha-estado">${p.disponible ? `Disponible · domicilio en ${esc(carta.ciudad)}` : 'Agotado por ahora'}</p>
-    ${p.descripcion ? `<p class="t-ficha-desc">${esc(p.descripcion)}</p>` : ''}
-    <div class="t-ficha-botones">${botonesCompra(p, carta, true)}</div>
-    <ul class="t-chips t-ficha-chips">${chipsPedido(carta)}</ul>
-  </div>
-</article>
-${
-  otros.length
-    ? `<section class="t-seccion" aria-labelledby="t-otros">
-<h2 id="t-otros">Más de ${esc(seccion.nombre.toLowerCase())}</h2>
+${cabecera(carta)}
+<main class="t-hoja" id="contenido">
+<div class="t-ancho">
+  <nav class="t-migas" aria-label="Estás en">
+    <ol><li><a href="/">Inicio</a></li><li><a href="/#${esc(seccion.id)}">${esc(seccion.nombre)}</a></li><li aria-current="page">${esc(p.nombre)}</li></ol>
+  </nav>
+  ${avisoViejo(carta)}
+  <article class="t-ficha${p.disponible ? '' : ' t-no'}">
+    <figure class="t-arte t-ficha-arte"><span class="t-etiqueta">${esc(seccion.nombre)}</span>${p.imagen ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" width="800" height="800" fetchpriority="high">` : sinFoto()}</figure>
+    <div class="t-ficha-info">
+      <span class="t-ceja">${esc(seccion.nombre)}</span>
+      <h1>${esc(p.nombre)}</h1>
+      <p class="t-precio t-ficha-precio">${precioHtml(p)}</p>
+      <p class="t-ficha-estado">${p.disponible ? `Disponible · domicilio en ${esc(carta.ciudad)}` : 'Agotado por ahora'}</p>
+      ${p.descripcion ? `<p class="t-ficha-desc">${esc(p.descripcion)}</p>` : ''}
+      <div class="t-ficha-botones">${botonesCompra(p, carta, true)}</div>
+      <ul class="t-chips">${chipsPedido(carta)}</ul>
+    </div>
+  </article>
+  ${
+    otros.length
+      ? `<section class="t-seccion" aria-labelledby="t-otros">
+<div class="t-encabezado"><div><span class="t-ceja">Tu próximo buen momento</span><h2 id="t-otros">Más de ${esc(seccion.nombre.toLowerCase())}</h2></div><a class="t-ver-todo" href="/#${esc(seccion.id)}">Ver todo ${ICONOS.flecha}</a></div>
 <ul class="t-rejilla">
 ${otros.map((x) => tarjeta(x, seccion, carta, pendientes)).join('\n')}
 </ul>
-<p class="t-mas"><a href="/#productos">Ver todos los productos</a></p>
 </section>`
-    : ''
-}
-</main>
-${pie(carta)}`;
+      : ''
+  }
+  ${pie(carta)}`;
 }
 
 function paginaNoEsta(carta) {
   return `${cabeza(carta, { titulo: `Producto no disponible | ${carta.marca}`, descripcion: `Este producto ya no está en la carta de ${carta.marca}.`, robots: 'noindex' })}
-${barra(carta)}
-<main class="t-ancho t-caida"><h1>Este producto ya no está en la carta</h1><p>Mira lo que tenemos hoy.</p><p><a class="t-comprar t-grande" href="/#productos">Ver todos los productos</a></p></main>
-${pie(carta)}`;
+${cabecera(carta)}
+<main class="t-hoja" id="contenido">
+<div class="t-ancho">
+  <section class="t-caida"><h1>Este producto ya no está en la carta</h1><p>Mira lo que tenemos hoy.</p><p><a class="t-comprar t-grande" href="/#categorias">Ver todos los productos</a></p></section>
+  ${pie(carta)}`;
 }
 
 // Cuando la carta no se pudo leer nunca: una página corta que manda a TRIVO.

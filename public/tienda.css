@@ -1,31 +1,34 @@
-/* Tienda pública de Agua Pure: los colores y la letra de su carta en TRIVO. */
+/* Tienda pública de Agua Pure: la misma identidad de su carta en TRIVO
+   (encabezado azul, hoja blanca, Manrope en títulos, Inter en el texto). */
 @font-face {
-  font-family: 'Montserrat';
-  src: url('fuentes/montserrat-latin.woff2') format('woff2');
+  font-family: 'Manrope';
+  src: url('fuentes/manrope-latin.woff2') format('woff2');
   font-weight: 600 800;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Archivo';
-  src: url('fuentes/archivo-latin.woff2') format('woff2');
-  font-weight: 400 800;
+  font-family: 'Inter';
+  src: url('fuentes/inter-latin.woff2') format('woff2');
+  font-weight: 400 700;
   font-style: normal;
   font-display: swap;
 }
 
 :root {
-  --azul: #0db1e7;
-  --azul-suave: #e6f7fd;
-  --marino: #102c3f;
-  --fondo: #f8fafc;
-  --tarjeta: #fff;
-  --texto: #0f172a;
+  --azul: #0369a1;
+  --azul-hondo: #07557e;
+  --celeste: #0db1e7;
+  --celeste-suave: #e3f3fb;
+  --tinta: #142531;
   --gris: #586974;
-  --borde: #dfe7ee;
+  --gris-claro: #657580;
+  --arte: #f2f4f5;
+  --arte-hover: #ebf3f7;
+  --borde: #e0e9ef;
+  --suave: #f6f9fb;
   --verde: #047857;
-  --verde-suave: #e8f7f0;
-  --radio: 16px;
+  --titulos: 'Manrope', 'Inter', Arial, sans-serif;
   color-scheme: light;
 }
 
@@ -34,156 +37,197 @@ html { -webkit-text-size-adjust: 100%; }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 body {
   margin: 0;
-  background: var(--fondo);
-  color: var(--texto);
-  font: 400 1rem/1.5 'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--azul);
+  color: var(--tinta);
+  font: 400 1rem/1.5 'Inter', Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
 }
-h1, h2, h3 { font-family: 'Montserrat', 'Archivo', system-ui, sans-serif; line-height: 1.15; margin: 0; }
-a { color: inherit; }
+h1, h2, h3, p { margin: 0; }
+a { color: inherit; text-decoration: none; }
 img { display: block; max-width: 100%; }
-svg { width: 1.15em; height: 1.15em; flex: none; }
+svg { width: 20px; height: 20px; flex: none; }
 [hidden] { display: none !important; }
-:focus-visible { outline: 3px solid var(--azul); outline-offset: 2px; }
+:focus-visible { outline: 3px solid var(--celeste); outline-offset: 3px; border-radius: 8px; }
 
-.t-ancho { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+.t-ancho { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 20px; }
 .t-oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.t-saltar { position: absolute; left: 16px; top: -60px; background: var(--marino); color: #fff; padding: 10px 14px; border-radius: 10px; z-index: 10; }
+.t-saltar { position: absolute; left: 16px; top: -60px; z-index: 50; background: #fff; color: var(--azul); padding: 10px 14px; border-radius: 12px; font-weight: 700; }
 .t-saltar:focus { top: 12px; }
 
-/* ── Barra ─────────────────────────────────────────────────────────────── */
-.t-barra { background: var(--marino); color: #fff; }
-.t-barra-dentro { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; }
-.t-marca { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-.t-marca img { width: 44px; height: 44px; border-radius: 12px; background: #fff; }
-.t-marca span { font: 800 1.1rem/1.1 'Montserrat', sans-serif; letter-spacing: .02em; text-transform: uppercase; }
-.t-marca small { display: block; font-weight: 600; font-size: .68rem; letter-spacing: .14em; color: #9fdcf3; }
-.t-ayuda { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 999px; border: 1px solid rgb(255 255 255 / .3); text-decoration: none; font-weight: 600; font-size: .9rem; }
-.t-ayuda:hover { background: rgb(255 255 255 / .1); }
+.t-ceja { display: block; color: #597180; font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
 
-/* ── Portada ───────────────────────────────────────────────────────────── */
-.t-portada { position: relative; overflow: hidden; color: #fff; background: var(--marino); }
-.t-portada-foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: right center; }
-.t-portada::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgb(16 44 63 / .94) 0%, rgb(16 44 63 / .78) 55%, rgb(16 44 63 / .25) 100%); }
-.t-portada-texto { position: relative; z-index: 1; padding-top: 44px; padding-bottom: 44px; }
-.t-portada h1 { font-size: clamp(1.9rem, 6vw, 3.1rem); font-weight: 800; max-width: 16ch; letter-spacing: -.01em; }
-.t-portada p { margin: 12px 0 0; font-size: 1.1rem; color: #d6eef8; max-width: 40ch; }
-.t-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 0; padding: 0; }
-.t-chips li { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; background: rgb(255 255 255 / .12); border: 1px solid rgb(255 255 255 / .18); font-size: .88rem; }
-.t-chips b { font-weight: 700; }
-.t-portada-botones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
-@media (max-width: 520px) {
-  .t-portada-texto { padding-top: 32px; padding-bottom: 32px; }
-  .t-portada p { font-size: 1rem; }
-  .t-chips { gap: 6px; margin-top: 18px; }
-  .t-chips li { padding: 6px 10px; font-size: .8rem; }
-  .t-portada-botones { margin-top: 20px; }
-  .t-portada-botones a { flex: 1 1 auto; }
+/* ── Encabezado azul ───────────────────────────────────────────────────── */
+.t-cabecera { background: var(--azul); color: #fff; padding: 22px 0 44px; }
+.t-cabecera-fila { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+.t-marca { display: inline-flex; align-items: center; gap: 12px; }
+.t-marca img { width: 56px; height: 56px; padding: 3px; background: #fff; border-radius: 17px; object-fit: contain; }
+.t-marca span { font: 800 1.35rem/1 var(--titulos); letter-spacing: -.03em; text-transform: uppercase; }
+.t-marca small { display: block; margin-top: 6px; font: 600 .62rem/1 'Inter', sans-serif; letter-spacing: .26em; }
+.t-ayuda { display: inline-flex; align-items: center; gap: 9px; padding: 12px 18px; border-radius: 30px; background: #fff; color: var(--azul-hondo); font-size: .82rem; font-weight: 700; }
+.t-ayuda svg { width: 24px; height: 24px; }
+.t-ayuda:hover { background: var(--celeste-suave); }
+
+.t-entrega { display: flex; align-items: center; gap: 16px; min-height: 76px; padding: 14px 22px; background: #fff; color: var(--tinta); border: 1px solid var(--borde); border-radius: 18px; }
+.t-entrega > svg { width: 24px; height: 24px; color: var(--tinta); }
+.t-entrega > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.t-entrega > div span { font-size: .78rem; color: var(--gris); }
+.t-entrega strong { font-size: 1.02rem; font-weight: 700; }
+.t-entrega > a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--azul); font-size: .85rem; font-weight: 700; }
+.t-entrega > a svg { width: 15px; height: 15px; }
+
+/* ── Hoja blanca ───────────────────────────────────────────────────────── */
+.t-hoja { position: relative; margin-top: -22px; padding: 26px 0 110px; background: #fff; border-radius: 30px 30px 0 0; min-height: 60vh; }
+
+.t-intro { padding: 4px 0 20px; }
+.t-intro h1 { margin-top: 8px; font: 800 clamp(1.7rem, 4.4vw, 2.6rem)/1.08 var(--titulos); letter-spacing: -.035em; max-width: 22ch; }
+.t-intro p { margin-top: 10px; color: var(--gris); font-size: 1.02rem; }
+.t-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; padding: 0; }
+.t-chips li { padding: 7px 12px; border-radius: 999px; background: var(--suave); border: 1px solid var(--borde); font-size: .8rem; color: var(--gris); }
+.t-chips b { color: var(--tinta); font-weight: 600; }
+
+.t-pregunta { display: flex; align-items: center; gap: 14px; min-height: 68px; padding: 12px 20px; background: var(--suave); border: 1px solid #e5ecf0; border-radius: 20px; }
+.t-pregunta > svg:first-child { width: 30px; height: 30px; color: var(--azul); }
+.t-pregunta > span { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.t-pregunta strong { font-size: 1.05rem; font-weight: 500; }
+.t-pregunta small { font-size: .78rem; color: var(--gris); }
+.t-pregunta > svg:last-child { width: 22px; height: 22px; color: var(--azul); }
+.t-pregunta:hover { background: var(--arte-hover); }
+
+.t-encabezado { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.t-encabezado h2 { margin-top: 6px; font: 800 clamp(1.35rem, 3vw, 1.75rem)/1.12 var(--titulos); letter-spacing: -.035em; }
+.t-encabezado > .t-ceja { padding-bottom: 6px; }
+.t-cuenta, .t-ver-todo { flex: none; padding-bottom: 4px; color: var(--azul); font-size: .82rem; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+.t-ver-todo svg { width: 15px; height: 15px; }
+
+/* Categorías con foto */
+.t-planes { margin-top: 34px; }
+.t-categorias { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .t-categorias { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 10px; } }
+.t-categoria { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
+.t-ficha-cat { display: grid; place-items: center; width: 100%; max-width: 140px; aspect-ratio: 1; border-radius: 18px; overflow: hidden; background: var(--celeste-suave); margin-bottom: 8px; transition: transform .18s ease; }
+.t-ficha-cat img { width: 100%; height: 100%; object-fit: cover; }
+.t-categoria:hover .t-ficha-cat { transform: translateY(-3px); }
+.t-categoria strong { font-size: .88rem; font-weight: 600; line-height: 1.25; }
+.t-categoria small { font-size: .72rem; color: var(--gris-claro); }
+
+.t-filtro { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin: 34px 0 6px; }
+.t-total { color: var(--gris); font-size: .9rem; }
+.t-buscar { flex: 0 1 340px; }
+.t-buscar input { width: 100%; height: 48px; padding: 0 20px; border-radius: 999px; border: 1.5px solid var(--azul); background: var(--celeste-suave); font: inherit; font-size: .95rem; color: var(--tinta); }
+.t-buscar input::placeholder { color: #4d7a93; }
+.t-buscar input:focus { outline: none; background: #fff; box-shadow: 0 0 0 4px rgb(3 105 161 / .14); }
+@media (max-width: 640px) { .t-buscar { flex-basis: 100%; } }
+
+.t-aviso { margin: 14px 0 0; padding: 12px 16px; border-radius: 14px; background: #fff7e6; border: 1px solid #f3d9a4; color: #6b4a07; font-size: .9rem; }
+
+/* ── Productos ─────────────────────────────────────────────────────────── */
+.t-seccion { padding-top: 38px; scroll-margin-top: 12px; }
+.t-rejilla { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 30px 22px; }
+@media (max-width: 1000px) { .t-rejilla { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px 16px; } }
+@media (max-width: 640px) { .t-rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 13px; } }
+
+.t-producto { position: relative; min-width: 0; display: flex; flex-direction: column; scroll-margin-top: 12px; }
+.t-arte { position: relative; isolation: isolate; display: flex; align-items: center; justify-content: center; aspect-ratio: 1.15; padding: 22px; margin: 0 0 14px; background: var(--arte); border-radius: 18px; overflow: hidden; transition: background-color .18s; }
+.t-arte img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
+.t-producto:hover .t-arte { background: var(--arte-hover); }
+.t-etiqueta { position: absolute; z-index: 2; top: 12px; left: 12px; max-width: 72%; padding: 6px 10px; border: 1px solid #e6ebee; background: #fff; border-radius: 10px; font-size: .68rem; line-height: 1.3; color: #475f6e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-cinta { position: absolute; z-index: 2; top: 12px; right: 12px; padding: 5px 10px; border-radius: 999px; background: var(--tinta); color: #fff; font-size: .66rem; font-weight: 700; letter-spacing: .03em; }
+.t-sinfoto { display: grid; place-items: center; width: 100%; height: 100%; color: #9fd3ea; }
+.t-sinfoto svg { width: 34%; height: auto; max-width: 52px; }
+
+.t-precio { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; row-gap: 2px; margin-bottom: 6px; }
+.t-precio strong { font: 800 1.45rem/1.1 var(--titulos); letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.t-precio span { font-size: .72rem; color: var(--gris-claro); }
+.t-precio del { font-size: .82rem; color: var(--gris-claro); }
+.t-desde { font-size: .72rem; color: var(--gris-claro); }
+.t-producto h3 { font-size: 1rem; font-weight: 600; letter-spacing: -.012em; line-height: 1.32; }
+.t-producto h3 a:hover { color: var(--azul); }
+.t-desc { margin-top: 5px; font-size: .8rem; line-height: 1.4; color: var(--gris-claro); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.t-botones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 12px; }
+@media (max-width: 640px) {
+  .t-arte { padding: 14px; border-radius: 14px; aspect-ratio: 1; }
+  .t-etiqueta { top: 9px; left: 9px; font-size: .6rem; padding: 4px 7px; }
+  .t-precio strong { font-size: 1.2rem; }
+  .t-precio span { width: 100%; }
+  .t-producto h3 { font-size: .9rem; }
+  .t-botones { flex-direction: column; gap: 6px; padding-top: 10px; }
+  .t-botones .t-comprar, .t-botones .t-wa { min-height: 38px; font-size: .8rem; }
+  .t-botones svg { width: 16px; height: 16px; }
 }
-.t-portada .t-wa { background: transparent; color: #fff; border-color: rgb(255 255 255 / .55); }
-.t-portada .t-wa:hover { background: rgb(255 255 255 / .1); }
 
 /* ── Botones ───────────────────────────────────────────────────────────── */
 .t-comprar, .t-wa {
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  min-height: 42px; padding: 0 14px; border-radius: 12px; border: 1.5px solid transparent;
-  font: 700 .92rem/1 'Montserrat', sans-serif; text-decoration: none; cursor: pointer;
-  transition: background-color .15s, transform .1s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex: 1 1 auto;
+  min-height: 42px; padding: 0 14px; border-radius: 999px; border: 1.5px solid transparent;
+  font: 700 .85rem/1 'Inter', sans-serif; cursor: pointer; transition: background-color .15s, transform .1s;
 }
-.t-comprar { background: var(--azul); color: var(--marino); }
-.t-comprar:hover { background: #2cc0f0; }
-.t-wa { background: var(--verde-suave); color: var(--verde); border-color: #b9e6d2; }
-.t-wa:hover { background: #d7f1e5; }
+.t-comprar svg, .t-wa svg { width: 18px; height: 18px; }
+.t-comprar { background: var(--azul); color: #fff; }
+.t-comprar:hover { background: var(--azul-hondo); }
+.t-wa { background: #fff; color: var(--azul); border-color: var(--azul); }
+.t-wa:hover { background: var(--celeste-suave); }
 .t-comprar:active, .t-wa:active { transform: scale(.98); }
-.t-grande { min-height: 50px; padding: 0 22px; font-size: 1rem; border-radius: 14px; }
-
-/* ── Secciones (fijas arriba) ──────────────────────────────────────────── */
-.t-secciones { position: sticky; top: 0; z-index: 5; background: rgb(248 250 252 / .94); backdrop-filter: blur(10px); border-bottom: 1px solid var(--borde); }
-.t-secciones-dentro { display: flex; align-items: center; gap: 12px; padding-top: 10px; padding-bottom: 10px; flex-wrap: wrap; }
-.t-secciones ul { list-style: none; display: flex; gap: 8px; margin: 0; padding: 0; overflow-x: auto; scrollbar-width: none; flex: 1 1 auto; min-width: 0; }
-.t-secciones ul::-webkit-scrollbar { display: none; }
-.t-secciones a { display: block; white-space: nowrap; padding: 8px 14px; border-radius: 999px; background: var(--tarjeta); border: 1px solid var(--borde); text-decoration: none; font-weight: 600; font-size: .9rem; color: var(--marino); }
-.t-secciones a:hover { border-color: var(--azul); }
-.t-buscar { flex: 0 1 300px; }
-.t-buscar input { width: 100%; height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--borde); background: var(--tarjeta); font: inherit; font-size: .95rem; color: var(--texto); }
-.t-buscar input:focus { outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px rgb(13 177 231 / .2); }
-@media (max-width: 640px) {
-  .t-buscar { flex-basis: 100%; }
-}
-
-/* ── Productos ─────────────────────────────────────────────────────────── */
-main { padding-bottom: 40px; }
-.t-aviso { margin: 20px 0 0; padding: 12px 14px; border-radius: 12px; background: #fff7e6; border: 1px solid #f3d9a4; color: #6b4a07; }
-.t-seccion { padding-top: 30px; scroll-margin-top: 70px; }
-@media (max-width: 640px) { .t-seccion { scroll-margin-top: 116px; } }
-.t-seccion h2 { display: flex; align-items: center; gap: 10px; font-size: clamp(1.35rem, 3.5vw, 1.7rem); font-weight: 800; color: var(--marino); }
-.t-seccion h2 small { font: 700 .8rem/1 'Archivo', sans-serif; padding: 5px 9px; border-radius: 999px; background: var(--azul-suave); color: #075e7c; }
-.t-rejilla { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); }
-@media (max-width: 520px) { .t-rejilla { grid-template-columns: 1fr 1fr; gap: 10px; } }
-
-.t-producto { display: flex; flex-direction: column; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio); overflow: hidden; scroll-margin-top: 80px; transition: box-shadow .2s, transform .2s; }
-@media (hover: hover) { .t-producto:hover { box-shadow: 0 10px 28px -12px rgb(16 44 63 / .35); transform: translateY(-2px); } }
-.t-foto { position: relative; margin: 0; aspect-ratio: 4 / 3; background: var(--azul-suave); }
-.t-foto img { width: 100%; height: 100%; object-fit: cover; }
-.t-cinta { position: absolute; top: 10px; left: 10px; padding: 4px 9px; border-radius: 999px; background: var(--marino); color: #fff; font: 700 .72rem/1.2 'Montserrat', sans-serif; letter-spacing: .03em; }
-.t-sinfoto { width: 100%; height: 100%; display: grid; place-items: center; color: var(--azul); background: linear-gradient(160deg, #e9f8fe, #cdeefb); }
-.t-sinfoto svg { width: 34%; height: auto; opacity: .85; }
-.t-sinfoto-lata { color: #c79a1c; background: linear-gradient(160deg, #fff8e3, #f7e7b4); }
-
-.t-info { display: flex; flex-direction: column; gap: 6px; padding: 12px 12px 14px; flex: 1; }
-.t-info h3 { font-size: .98rem; font-weight: 700; color: var(--texto); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.t-desc { margin: 0; font-size: .82rem; line-height: 1.35; color: var(--gris); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.t-precio { margin: auto 0 0; padding-top: 4px; color: var(--marino); }
-.t-precio strong { font: 800 1.2rem/1 'Montserrat', sans-serif; }
-.t-precio s { color: var(--gris); font-size: .85rem; margin-left: 4px; }
-.t-desde { font-size: .8rem; color: var(--gris); }
-.t-botones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
-.t-botones .t-comprar, .t-botones .t-wa { padding: 0 8px; }
-@media (max-width: 520px) {
-  .t-info { padding: 10px 10px 12px; }
-  .t-info h3 { font-size: .9rem; }
-  .t-precio strong { font-size: 1.05rem; }
-  .t-botones { grid-template-columns: 1fr; gap: 6px; }
-}
-.t-agotado { margin-top: 6px; padding: 10px; border-radius: 12px; background: #eef1f4; color: var(--gris); text-align: center; font-weight: 600; font-size: .88rem; }
-.t-no .t-foto img { filter: grayscale(1); opacity: .6; }
-.t-vacio { margin: 30px 0; padding: 18px; text-align: center; color: var(--gris); }
-.t-vacio a { color: var(--verde); font-weight: 700; }
-
-/* Foto y nombre llevan a la página del producto. */
-.t-foto-enlace { display: block; }
-.t-info h3 a { text-decoration: none; }
-.t-info h3 a:hover { color: #075e7c; text-decoration: underline; text-underline-offset: 3px; }
-.t-mas { margin: 18px 0 0; text-align: center; }
-.t-mas a { color: #075e7c; font-weight: 700; }
+.t-grande { min-height: 52px; padding: 0 24px; font-size: .95rem; }
+.t-agotado { margin-top: auto; padding: 11px; border-radius: 999px; background: var(--arte); color: var(--gris); text-align: center; font-weight: 600; font-size: .82rem; }
+.t-no .t-arte img { filter: grayscale(1); opacity: .55; }
+.t-vacio { margin: 30px 0; padding: 20px; text-align: center; color: var(--gris); background: var(--suave); border-radius: 18px; }
+.t-vacio a { color: var(--azul); font-weight: 700; }
 
 /* ── Página de un producto ─────────────────────────────────────────────── */
-.t-migas ol { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 16px 0 0; font-size: .88rem; color: var(--gris); }
-.t-migas li + li::before { content: '›'; margin-right: 6px; }
-.t-migas a { color: #075e7c; text-decoration: none; font-weight: 600; }
+.t-migas ol { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 18px; padding: 0; font-size: .82rem; color: var(--gris); }
+.t-migas li + li::before { content: '›'; margin-right: 6px; color: #9aabb6; }
+.t-migas a { color: var(--azul); font-weight: 600; }
 .t-migas a:hover { text-decoration: underline; }
-.t-migas [aria-current] { color: var(--texto); }
-.t-ficha { display: grid; gap: 24px; margin-top: 16px; padding: 16px; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 20px; }
-@media (min-width: 820px) { .t-ficha { grid-template-columns: 1.1fr 1fr; gap: 36px; padding: 24px; align-items: center; } }
-.t-ficha-foto { margin: 0; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: var(--azul-suave); }
-.t-ficha-foto img { width: 100%; height: 100%; object-fit: cover; }
-.t-ficha-seccion { margin: 0 0 6px; font: 700 .78rem/1 'Montserrat', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #075e7c; }
-.t-ficha h1 { font-size: clamp(1.5rem, 4vw, 2.2rem); font-weight: 800; color: var(--marino); }
-.t-ficha-precio { margin: 14px 0 0; }
-.t-ficha-precio strong { font-size: 2rem; }
-.t-ficha-estado { margin: 6px 0 0; color: var(--verde); font-weight: 600; }
+.t-migas [aria-current] { color: var(--tinta); }
+.t-ficha { display: grid; gap: 24px; }
+@media (min-width: 820px) { .t-ficha { grid-template-columns: 1.05fr 1fr; gap: 44px; align-items: center; } }
+.t-ficha-arte { aspect-ratio: 1.1; padding: 34px; margin: 0; border-radius: 24px; }
+.t-ficha-info h1 { margin-top: 8px; font: 800 clamp(1.6rem, 3.6vw, 2.4rem)/1.1 var(--titulos); letter-spacing: -.035em; }
+.t-ficha-precio { margin-top: 16px; }
+.t-ficha-precio strong { font-size: 2.2rem; }
+.t-ficha-precio span { width: auto; font-size: .85rem; }
+.t-ficha-estado { color: var(--verde); font-weight: 600; font-size: .92rem; }
 .t-no .t-ficha-estado { color: var(--gris); }
-.t-ficha-desc { margin: 14px 0 0; color: var(--gris); }
-.t-ficha-botones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
-.t-ficha-botones a { flex: 1 1 200px; }
-.t-ficha-chips { margin-top: 18px; }
-.t-ficha-chips li { background: var(--fondo); border-color: var(--borde); color: var(--texto); }
-.t-no .t-ficha-foto img { filter: grayscale(1); opacity: .6; }
+.t-ficha-desc { margin-top: 12px; color: var(--gris); }
+.t-ficha-botones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.t-ficha-botones a { flex: 1 1 220px; }
+.t-caida { padding: 50px 0; text-align: center; }
+.t-caida h1 { font: 800 1.6rem/1.2 var(--titulos); letter-spacing: -.03em; margin-bottom: 8px; }
+.t-caida p { color: var(--gris); }
+.t-caida p:last-child { margin-top: 18px; }
 
 /* ── Pie ───────────────────────────────────────────────────────────────── */
-.t-pie { background: var(--marino); color: #c9dbe6; padding: 30px 0 40px; font-size: .92rem; }
-.t-pie p { margin: 0 0 8px; }
-.t-pie b, .t-pie a { color: #fff; }
-.t-fecha { margin-top: 14px !important; font-size: .8rem; color: #93aebf; }
+.t-pie { margin-top: 48px; padding: 26px; border: 1px solid #e4eaee; border-radius: 20px; color: var(--gris); font-size: .86rem; line-height: 1.55; }
+.t-pie p + p { margin-top: 6px; }
+.t-pie a { color: var(--azul); font-weight: 600; }
+.t-pie-marca { font: 800 1.15rem/1.2 var(--titulos); letter-spacing: -.02em; color: var(--tinta); text-transform: uppercase; }
+.t-pie-lema { font-family: Georgia, serif; font-style: italic; color: var(--tinta); }
+.t-pie-nota { margin-top: 14px !important; font-size: .75rem; color: var(--gris-claro); }
 
-.t-caida { padding: 60px 16px; text-align: center; }
-.t-caida h1 { color: var(--marino); margin-bottom: 8px; }
+/* ── Barra inferior (como la carta) ────────────────────────────────────── */
+.t-barra-inferior { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; gap: 56px; padding: 8px 18px calc(8px + env(safe-area-inset-bottom, 0px)); background: rgb(255 255 255 / .97); border-top: 1px solid #e1e8ec; box-shadow: 0 -4px 20px rgb(23 59 81 / .04); }
+.t-barra-inferior a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-width: 64px; min-height: 48px; color: var(--gris-claro); font-size: .68rem; }
+.t-barra-inferior svg { width: 24px; height: 24px; }
+.t-barra-inferior .t-activo { color: var(--azul); }
+.t-barra-inferior .t-fuerte { font-weight: 600; }
+@media (max-width: 600px) {
+  .t-barra-inferior { justify-content: space-between; gap: 4px; padding: 8px 14px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .t-barra-inferior a { min-width: 54px; font-size: .62rem; }
+}
+
+/* ── Teléfono ──────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .t-ancho { padding: 0 16px; }
+  .t-cabecera { padding: 16px 0 40px; }
+  .t-cabecera-fila { margin-bottom: 16px; }
+  .t-marca { gap: 10px; }
+  .t-marca img { width: 48px; height: 48px; border-radius: 14px; }
+  .t-marca span { font-size: 1.15rem; }
+  .t-marca small { font-size: .52rem; letter-spacing: .2em; }
+  .t-ayuda { padding: 10px 14px; font-size: .75rem; }
+  .t-entrega { min-height: 70px; padding: 10px 16px; gap: 12px; border-radius: 16px; }
+  .t-entrega strong { font-size: .95rem; }
+  .t-hoja { border-radius: 24px 24px 0 0; padding-top: 20px; }
+  .t-pregunta { border-radius: 30px; }
+  .t-pie { padding: 20px 18px; }
+}

@@ -77,7 +77,7 @@ test('la página: SEO de Valledupar, datos para Google, Comprar hacia TRIVO y Pe
   assert.match(texto, /^Hola Agua Pure, quiero pedir:\n• 1 × .+\(\$ [\d.]+\)\n\nMi dirección es: $/);
   assert.match(html, /Pedido mínimo <b>\$ 10\.000<\/b>/);
   assert.match(html, /Pagas con <b>Nequi o Llave<\/b>/);
-  assert.equal((html.match(/fetchpriority="high"/g) || []).length, 5, 'la portada y las cuatro primeras fotos cargan primero; el resto, al bajar');
+  assert.equal((html.match(/fetchpriority="high"/g) || []).length, 4, 'las cuatro primeras fotos cargan primero; el resto, al bajar');
 });
 
 test('si TRIVO falla sale la última carta buena; si nunca cargó, 503 y enlace a TRIVO', async () => {
