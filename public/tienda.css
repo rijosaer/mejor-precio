@@ -343,3 +343,16 @@ svg { width: 20px; height: 20px; flex: none; }
 .t-pasos li::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 6px; border-radius: 999px; background: var(--borde); }
 .t-pasos li.t-hecho { color: var(--tinta); font-weight: 600; }
 .t-pasos li.t-hecho::before { background: var(--azul); }
+
+/* Detalle del pedido hecho */
+.t-detalle { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--borde); }
+.t-detalle h3 { margin-bottom: 8px; font: 800 1rem/1.2 var(--titulos); letter-spacing: -.02em; }
+.t-detalle-lineas { list-style: none; margin: 0; padding: 0; }
+.t-detalle-lineas li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px dashed var(--borde); font-size: .88rem; }
+.t-detalle-lineas b { font-weight: 700; color: var(--azul); }
+.t-detalle-lineas small { display: block; color: var(--gris); font-size: .76rem; }
+.t-detalle-lineas strong { flex: none; font-variant-numeric: tabular-nums; }
+.t-detalle-datos { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px 0 6px; font-size: .86rem; }
+.t-detalle-datos dt { color: var(--gris); }
+.t-detalle-datos dd { margin: 0; font-weight: 600; }
+.t-detalle-datos dd:first-letter { text-transform: uppercase; }

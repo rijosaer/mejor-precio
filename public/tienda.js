@@ -171,7 +171,7 @@ function iniciarPedido(D) {
 
   const ultimo = () => {
     const u = guardado.leer(CLAVE_ULTIMO, null);
-    return u && Date.now() - u.t < DOCE_HORAS && !u.final ? u : null;
+    return u && Date.now() - u.t < DOCE_HORAS ? u : null;
   };
 
   // ── Barra «Ver mi pedido» y aviso de «agregado» ─────────────────────────
@@ -187,7 +187,7 @@ function iniciarPedido(D) {
       barra.append(icono(ICONO.bolsa), h('span', { class: 't-carrito-n' }, String(n)), h('span', {}, 'Ver mi pedido'), h('strong', {}, plata(subtotal())));
       barra.onclick = () => abrir(vistaCarrito);
     } else if (u) {
-      barra.append(icono(ICONO.listo), h('span', {}, `${u.referencia} · ver en qué va`));
+      barra.append(icono(ICONO.listo), h('span', {}, u.final ? `Tu último pedido · ${u.referencia}` : `${u.referencia} · ver en qué va`));
       barra.onclick = () => abrir(() => vistaListo(u));
     }
     barra.hidden = !n && !u;
@@ -507,7 +507,20 @@ function iniciarPedido(D) {
           lng: ubic.lng,
           pago: pagoId,
         });
-        const u = { ...r, transferencia: Boolean(pago && /transfer|wallet/.test(pago.tipo)), pago: pago?.nombre || null, t: Date.now() };
+        // El detalle queda guardado en el teléfono: la confirmación de TRIVO no lo muestra.
+        const lineas = vigentes().map((l) => {
+          const x = info(l);
+          return { cantidad: l.c, nombre: x.nombre, presentacion: x.presentacion, total: x.precio * l.c };
+        });
+        const sub = subtotal();
+        const u = {
+          ...r,
+          transferencia: Boolean(pago && /transfer|wallet/.test(pago.tipo)),
+          pago: pago?.nombre || null,
+          t: Date.now(),
+          detalle: { lineas, subtotal: sub, domicilio: domicilio ? domicilio.valor : null, total: r.total || sub + (domicilio?.valor || 0) },
+          entrega: { ...cliente, ubicacion: ubic.lat !== null },
+        };
         guardado.poner(CLAVE_ULTIMO, u);
         carrito = [];
         guardar();
@@ -560,10 +573,65 @@ function iniciarPedido(D) {
     return `${((h24 + 11) % 12) + 1}:${String(m || 0).padStart(2, '0')} ${sufijo}`;
   };
 
-  // El pedido ya está en TRIVO: número, en qué va y el comprobante.
+  const horaDe = (t) => new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', weekday: 'long', hour: 'numeric', minute: '2-digit' }).format(t);
+
+  // El detalle del pedido: productos, presentaciones, valores, entrega y pago.
+  // Cuando TRIVO devuelve su cuenta, los productos salen de ahí (lo que TRIVO
+  // de verdad registró); mientras tanto, lo que el cliente pidió.
+  function detalleHtml(u, cuentaTrivo) {
+    const d = u.detalle;
+    if (!d && !cuentaTrivo) return '';
+    const lineas = cuentaTrivo?.lineas?.length ? cuentaTrivo.lineas : d?.lineas || [];
+    const total = cuentaTrivo?.total || d?.total;
+    const e = u.entrega || {};
+    return h(
+      'section',
+      { class: 't-detalle', 'aria-label': 'Detalle del pedido' },
+      h('h3', {}, 'Detalle del pedido'),
+      h(
+        'ul',
+        { class: 't-detalle-lineas' },
+        lineas.map((l) => h('li', {}, h('span', {}, h('b', {}, `${l.cantidad} ×`), ` ${l.nombre}`, l.presentacion ? h('small', {}, l.presentacion) : ''), h('strong', {}, plata(l.total)))),
+      ),
+      h(
+        'div',
+        { class: 't-resumen' },
+        d && !cuentaTrivo ? h('p', {}, h('span', {}, 'Productos'), h('strong', {}, plata(d.subtotal))) : '',
+        d?.domicilio != null && !cuentaTrivo ? h('p', {}, h('span', {}, 'Domicilio'), h('strong', {}, d.domicilio ? plata(d.domicilio) : 'Gratis')) : '',
+        total ? h('p', { class: 't-resumen-total' }, h('span', {}, 'Total'), h('strong', {}, plata(total))) : '',
+      ),
+      h(
+        'dl',
+        { class: 't-detalle-datos' },
+        e.nombre ? [h('dt', {}, 'Entregar a'), h('dd', {}, `${e.nombre}${e.celular ? ` · ${e.celular}` : ''}`)] : '',
+        e.direccion ? [h('dt', {}, 'Dirección'), h('dd', {}, `${e.direccion}${e.indicaciones ? ` (${e.indicaciones})` : ''}${e.ubicacion ? ' · con ubicación GPS' : ''}`)] : '',
+        u.pago ? [h('dt', {}, 'Pago'), h('dd', {}, u.pago)] : '',
+        u.t ? [h('dt', {}, 'Hecho'), h('dd', {}, horaDe(u.t))] : '',
+      ),
+      cuentaTrivo ? h('p', { class: 't-nota' }, 'Productos y total como los registró la tienda.') : '',
+    );
+  }
+
+  // El mensaje para la tienda lleva el detalle completo.
+  function mensajeTienda(u) {
+    const d = u.detalle;
+    const e = u.entrega || {};
+    return [
+      `Hola ${D.marca}, acabo de hacer el *${u.referencia}* en la página:`,
+      ...(d?.lineas || []).map((l) => `• ${l.cantidad} × ${l.nombre}${l.presentacion ? ` (${l.presentacion})` : ''} — ${plata(l.total)}`),
+      d?.total || u.total ? `Total: ${plata(u.total || d.total)}${u.pago ? ` · ${u.pago}` : ''}` : null,
+      e.nombre ? `Entregar a: ${e.nombre}${e.direccion ? `, ${e.direccion}` : ''}` : null,
+      u.transferencia ? 'Te envío el comprobante de pago.' : null,
+    ]
+      .filter((x) => x !== null)
+      .join('\n');
+  }
+
+  // El pedido ya está en TRIVO: número, en qué va, el detalle y el comprobante.
   const PASOS = ['Recibido', 'En preparación', 'Listo', 'En camino', 'Entregado'];
   function vistaListo(u) {
     const estado = h('p', { class: 't-estado', 'aria-live': 'polite' }, 'Recibido');
+    const detalle = h('div', {}, detalleHtml(u, u.cuentaTrivo));
     const pasos = h('ol', { class: 't-pasos' }, PASOS.map((p) => h('li', {}, p)));
     const pintar = (s) => {
       estado.textContent = s.cancelado ? 'Pedido cancelado. Escríbenos si tienes dudas.' : s.etiqueta;
@@ -578,11 +646,16 @@ function iniciarPedido(D) {
       try {
         const s = await api(`pedido/${u.uuid}`);
         pintar(s);
+        if (s.detalle?.lineas?.length) {
+          u.cuentaTrivo = s.detalle;
+          detalle.replaceChildren(detalleHtml(u, s.detalle));
+        }
         if (s.final) {
           clearInterval(reloj);
-          guardado.poner(CLAVE_ULTIMO, { ...u, final: true });
+          u.final = true;
           pintarBarra();
         }
+        guardado.poner(CLAVE_ULTIMO, u);
       } catch {
         /* se intenta en la próxima vuelta */
       }
@@ -591,14 +664,15 @@ function iniciarPedido(D) {
     reloj = setInterval(revisar, 15000);
     alCerrar = () => clearInterval(reloj);
 
-    const mensaje = `Hola ${D.marca}, acabo de hacer el *${u.referencia}* en la página${u.total ? ` por ${plata(u.total)}` : ''}.${u.transferencia ? ' Te envío el comprobante de pago.' : ''}`;
+    const mensaje = mensajeTienda(u);
     armar({
-      texto: 'Pedido enviado',
+      texto: u.final ? 'Tu último pedido' : 'Pedido enviado',
       contenido: [
-        h('div', { class: 't-listo' }, h('span', { class: 't-listo-icono' }, icono(ICONO.listo)), h('p', {}, '¡Tu pedido llegó a la tienda!'), h('strong', {}, u.referencia), u.total ? h('p', { class: 't-nota' }, `Total ${plata(u.total)}${u.pago ? ` · ${u.pago}` : ''}`) : ''),
+        h('div', { class: 't-listo' }, h('span', { class: 't-listo-icono' }, icono(ICONO.listo)), h('p', {}, u.final ? 'Tu último pedido' : '¡Tu pedido llegó a la tienda!'), h('strong', {}, u.referencia)),
         estado,
         pasos,
-        u.transferencia ? h('p', { class: 't-nota' }, 'Envía el comprobante de la transferencia por WhatsApp para despachar más rápido.') : '',
+        u.transferencia && !u.final ? h('p', { class: 't-nota' }, 'Envía el comprobante de la transferencia por WhatsApp para despachar más rápido.') : '',
+        detalle,
       ],
       pie: [
         u.whatsapp ? h('a', { class: u.transferencia ? 't-comprar t-grande t-ancho-total' : 't-wa t-grande t-ancho-total', href: `https://wa.me/${u.whatsapp}?text=${encodeURIComponent(mensaje)}`, target: '_blank', rel: 'noopener' }, u.transferencia ? 'Enviar comprobante por WhatsApp' : 'Escribir a la tienda') : '',

@@ -31,7 +31,7 @@ export function nombreVisible(nombre) {
 }
 
 // «Fria» → «Fría»: así se ven las presentaciones.
-const nombreVariante = (nombre) => {
+export const nombreVariante = (nombre) => {
   const n = String(nombre || '').trim().replace(/\bfria\b/gi, (m) => (m[0] === 'F' ? 'Fría' : 'fría'));
   return n.charAt(0).toLocaleUpperCase('es-CO') + n.slice(1);
 };

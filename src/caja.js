@@ -7,7 +7,7 @@
 // falla con `sinTrivo` y la página ofrece mandarlo completo por WhatsApp.
 // El navegador no puede hablar con TRIVO directo (TRIVO no permite otros
 // dominios), por eso todo pasa por este servidor.
-import { cargarCarta } from './tienda.js';
+import { cargarCarta, nombreVariante, nombreVisible } from './tienda.js';
 import { BASE, SLUG } from './tiendas/aguapure.js';
 
 const ENTRADA = `${BASE}/api/public/menu/${SLUG}`;
@@ -266,11 +266,25 @@ export async function manejarCaja(request, { ip = '' } = {}) {
       if (r.estado === 404) return json(404, { error: 'No encontramos ese pedido' });
       if (!r.ok || !r.datos?.status) throw new SinTrivo(`Estado: HTTP ${r.estado}`);
       const s = r.datos.status;
+      // La «cuenta» de TRIVO: lo que de verdad quedó registrado en el pedido.
+      const cuenta = r.datos.account;
+      const detalle = Array.isArray(cuenta?.items)
+        ? {
+            lineas: cuenta.items.slice(0, 60).map((i) => ({
+              cantidad: Number(i.quantity) || 0,
+              nombre: nombreVisible(i.name),
+              presentacion: i.variant ? nombreVariante(i.variant) : null,
+              total: Number(i.line_total) || 0,
+            })),
+            total: Number(cuenta.total) || null,
+          }
+        : null;
       return json(200, {
         etapa: Number(s.stage) || 0,
         etiqueta: String(s.label || 'Recibido'),
         final: Boolean(s.is_final),
         cancelado: s.mapping === 'cancelled',
+        detalle,
       });
     }
 

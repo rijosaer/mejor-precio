@@ -27,7 +27,13 @@ globalThis.fetch = async (url, opciones = {}) => {
   if (u.pathname.endsWith('/delivery-quote/')) return ok({ fee: '8000.00', fee_original: '8000.00', free_delivery: null, zone_name: '' });
   if (u.pathname.endsWith('/reverse-geocode/')) return ok({ address: 'Calle 16 # 9-20, Centro, Valledupar', precision: 'house' });
   if (u.pathname.endsWith('/order/')) return respuestaPedido(cuerpo);
-  if (/\/order\/[^/]+\/status\/$/.test(u.pathname)) return ok({ status: { stage: 1, label: 'En preparación', is_final: false, mapping: 'preparing' }, service_type: 'delivery' });
+  if (/\/order\/[^/]+\/status\/$/.test(u.pathname)) {
+    return ok({
+      status: { stage: 1, label: 'En preparación', is_final: false, mapping: 'preparing' },
+      service_type: 'delivery',
+      account: { items: [{ quantity: 4, name: 'Aguila Original fria  x 330ml (lata) valledupar', variant: 'Fria', line_total: '11600.00' }, { quantity: 1, name: 'Hielo en cubo agua pure valledupar  3 kg', variant: null, line_total: '5000.00' }], total: '24600.00' },
+    });
+  }
   return new Response('{"detail":"no"}', { status: 404 });
 };
 
@@ -135,7 +141,19 @@ test('de punta a punta: caja, domicilio, ubicación, pedido a TRIVO y estado', a
   assert.equal(enviado.cuerpo.idempotency_key, CLAVE);
 
   r = await pedir('pedido/a1b2c3d4-0000-4000-8000-000000000001');
-  assert.deepEqual(await r.json(), { etapa: 1, etiqueta: 'En preparación', final: false, cancelado: false });
+  assert.deepEqual(await r.json(), {
+    etapa: 1,
+    etiqueta: 'En preparación',
+    final: false,
+    cancelado: false,
+    detalle: {
+      lineas: [
+        { cantidad: 4, nombre: 'Aguila Original fría x 330ml (lata)', presentacion: 'Fría', total: 11600 },
+        { cantidad: 1, nombre: 'Hielo en cubo 3 kg', presentacion: null, total: 5000 },
+      ],
+      total: 24600,
+    },
+  }, 'el detalle que TRIVO registró, con los nombres limpios');
 });
 
 test('si TRIVO dice que está cerrado, el cliente lo lee; si TRIVO no responde, se ofrece WhatsApp', async () => {
