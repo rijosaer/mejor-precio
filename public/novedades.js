@@ -28,6 +28,16 @@ export const VERSIONES = [
         antes: 'Los productos salían en el orden de TRIVO, con cajas, unidades y six pack mezclados.',
         ahora: 'En cada categoría van primero las unidades, luego los six pack y al final las cajas, cada grupo con su subtítulo.',
       },
+      {
+        titulo: 'Solo domicilios en Valledupar',
+        antes: 'No se revisaba dónde estaba el cliente.',
+        ahora: 'Si el cliente marca su ubicación por GPS y queda en otro municipio (La Paz, Codazzi…), la página se lo dice y el pedido no se acepta. La ciudad es la de la sucursal en TRIVO.',
+      },
+      {
+        titulo: 'Detalle del pedido hecho',
+        antes: 'Al terminar solo se veía el número del pedido.',
+        ahora: 'El cliente ve qué pidió (presentación, cantidades, valores), el domicilio, el total, la dirección y el pago, y lo puede volver a abrir durante 12 horas. El WhatsApp a la tienda lleva el mismo detalle.',
+      },
     ],
   },
   {

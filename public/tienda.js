@@ -386,6 +386,16 @@ function iniciarPedido(D) {
     const valor = (f) => f.querySelector('input, textarea').value.trim();
 
     const estadoUbic = h('p', { class: 't-nota', 'aria-live': 'polite' }, 'Así el domiciliario llega directo.');
+    const quitarUbicacion = (aviso) => {
+      ubic.lat = null;
+      ubic.lng = null;
+      botonUbic.classList.remove('t-marcada');
+      estadoUbic.textContent = aviso;
+      estadoUbic.classList.add('t-fuera');
+      domicilio = null;
+      pintarTotales();
+      cotizar();
+    };
     const botonUbic = h('button', { type: 'button', class: 't-wa t-ubicar' }, icono(ICONO.ubicacion), 'Usar mi ubicación');
     botonUbic.onclick = () => {
       if (!navigator.geolocation) return (estadoUbic.textContent = 'Este navegador no comparte la ubicación. Escribe la dirección.');
@@ -397,14 +407,17 @@ function iniciarPedido(D) {
           ubic.lng = pos.coords.longitude;
           botonUbic.disabled = false;
           botonUbic.classList.add('t-marcada');
+          estadoUbic.classList.remove('t-fuera');
           estadoUbic.textContent = 'Ubicación marcada. Escribe también la dirección con número.';
           try {
             const r = await api('ubicacion', ubic);
+            // Solo hay domicilios en la ciudad de la tienda: si el GPS marca otra, la ubicación no se usa.
+            if (r.enZona === false) return quitarUbicacion(`${r.error} Si el pedido es para una dirección en ${D.ciudad}, escríbela abajo.`);
             if (r.direccion) estadoUbic.textContent = `Ubicación marcada: ${r.direccion}. Escribe también la dirección con número.`;
             const input = fDireccion.querySelector('input');
             if (!input.value.trim() && r.direccion && r.precision !== 'area') input.value = r.direccion;
           } catch {
-            /* la ubicación igual se manda */
+            /* la ubicación se revisa otra vez al hacer el pedido */
           }
           cotizar();
         },
@@ -412,7 +425,8 @@ function iniciarPedido(D) {
           botonUbic.disabled = false;
           estadoUbic.textContent = error.code === 1 ? 'No diste permiso para la ubicación. Escribe la dirección.' : 'No pudimos ubicarte. Escribe la dirección.';
         },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+        // Siempre la ubicación de ahora (con ella se revisa que el domicilio sea en la ciudad).
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
       );
     };
 
@@ -531,6 +545,7 @@ function iniciarPedido(D) {
         pintarTotales();
         error.hidden = false;
         error.textContent = falla.datos?.error || 'No pudimos enviar el pedido. Revisa tu conexión e intenta de nuevo.';
+        if (falla.datos?.codigo === 'fuera_de_zona') quitarUbicacion(`${falla.datos.error} Si el pedido es para una dirección en ${D.ciudad}, escríbela abajo.`);
         // Si TRIVO no respondió (o no hay internet), el pedido sale completo por WhatsApp.
         const caida = falla.datos?.sinTrivo || !falla.estado;
         respaldo.hidden = !caida;

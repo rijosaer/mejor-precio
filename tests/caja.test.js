@@ -16,6 +16,7 @@ const PAGOS = [
   { id: 51, name: 'Nequi', type: 'wallet', account_number: '3105174290', requires_reference: true },
 ];
 const llamadas = [];
+let geoCaido = false;
 let respuestaPedido = () => new Response(JSON.stringify({ success: true, data: { uuid: 'a1b2c3d4-0000-4000-8000-000000000001', order_number: 901, delivery_number: 12, daily_number: 34, total: '20600.00', business_whatsapp: '573007643274' } }), { status: 201 });
 globalThis.fetch = async (url, opciones = {}) => {
   const u = new URL(String(url));
@@ -25,7 +26,13 @@ globalThis.fetch = async (url, opciones = {}) => {
   if (u.pathname === '/api/public/menu/agua-pure/') return new Response(JSON.stringify(real));
   if (u.pathname.endsWith('/payment-methods/')) return ok(PAGOS);
   if (u.pathname.endsWith('/delivery-quote/')) return ok({ fee: '8000.00', fee_original: '8000.00', free_delivery: null, zone_name: '' });
-  if (u.pathname.endsWith('/reverse-geocode/')) return ok({ address: 'Calle 16 # 9-20, Centro, Valledupar', precision: 'house' });
+  if (u.pathname.endsWith('/reverse-geocode/')) {
+    if (geoCaido) return new Response('{"detail":"x"}', { status: 503 });
+    // Lo que TRIVO devolvió de verdad (2026-11-09): La Paz (Cesar) cerca de 10.387; Valledupar en el resto.
+    return Number(u.searchParams.get('lat')) < 10.4
+      ? ok({ address: 'La Paz, Cesar, 202010', display_name: 'La Paz, Cesar, RAP Caribe, Colombia', precision: 'area', components: { city: 'La Paz', state: 'Cesar' } })
+      : ok({ address: 'Calle 16 # 9-20, Centro, Valledupar', display_name: 'Comuna 1, Perímetro Urbano Valledupar, Valledupar, Cesar, RAP Caribe, 200001, Colombia', precision: 'house', components: { city: 'Perímetro Urbano Valledupar', state: 'Cesar' } });
+  }
   if (u.pathname.endsWith('/order/')) return respuestaPedido(cuerpo);
   if (/\/order\/[^/]+\/status\/$/.test(u.pathname)) {
     return ok({
@@ -37,7 +44,7 @@ globalThis.fetch = async (url, opciones = {}) => {
   return new Response('{"detail":"no"}', { status: 404 });
 };
 
-const { armarPedido, celularLocal, manejarCaja, referencia, reiniciarCaja } = await import('../src/caja.js');
+const { armarPedido, celularLocal, enCiudad, manejarCaja, referencia, reiniciarCaja } = await import('../src/caja.js');
 const { armarCarta, olvidarMemoria } = await import('../src/tienda.js');
 
 const carta = () => armarCarta(structuredClone(real.data), { t: 1 });
@@ -130,7 +137,9 @@ test('de punta a punta: caja, domicilio, ubicación, pedido a TRIVO y estado', a
   assert.deepEqual(cotiza.cuerpo, { branch_code: 'B001', address: 'Calle 16 # 9-20', city: 'Valledupar', lat: 10.47, lng: -73.24, subtotal: 16600 });
 
   r = await pedir('ubicacion', { lat: 10.47, lng: -73.24 });
-  assert.deepEqual(await r.json(), { direccion: 'Calle 16 # 9-20, Centro, Valledupar', precision: 'house' });
+  assert.deepEqual(await r.json(), { direccion: 'Calle 16 # 9-20, Centro, Valledupar', precision: 'house', enZona: true });
+  r = await pedir('ubicacion', { lat: 10.387, lng: -73.172 });
+  assert.deepEqual(await r.json(), { direccion: 'La Paz, Cesar, 202010', precision: 'area', enZona: false, error: 'Tu ubicación queda en La Paz. Solo hacemos domicilios en Valledupar.' });
   assert.equal((await pedir('ubicacion', { lat: 40.4, lng: -3.7 })).status, 400, 'fuera de Colombia no');
 
   r = await pedir('pedido', base);
@@ -188,4 +197,40 @@ test('sin JSON no entra, y una misma IP no puede llenar a TRIVO de pedidos', asy
   for (let i = 0; i < 8; i++) estados.push((await pedir('pedido', { ...base, lineas: [] }, '3.3.3.3')).status);
   assert.deepEqual(estados.slice(-2), [429, 429]);
   assert.equal((await pedir('pedido', { ...base, lineas: [] }, '4.4.4.4')).status, 400, 'otra IP sigue normal');
+});
+
+test('la ciudad del GPS: Valledupar y sus corregimientos sí; La Paz, Codazzi, Bogotá no', () => {
+  // Respuestas reales de TRIVO (reverse-geocode) del 2026-11-09.
+  const punto = (city, display_name) => ({ components: { city }, display_name });
+  assert.ok(enCiudad(punto('Perímetro Urbano Valledupar', 'Comuna 1, Perímetro Urbano Valledupar, Valledupar, Cesar, RAP Caribe, 200001, Colombia'), 'Valledupar'));
+  assert.ok(enCiudad(punto('Valledupar', 'Homa, Valledupar, Cesar, RAP Caribe, Colombia'), 'Valledupar'), 'Valencia de Jesús es corregimiento de Valledupar');
+  assert.ok(enCiudad(punto(undefined, 'Vía Aeropuerto, Comuna 3, Valledupar, Cesar, Colombia'), 'valledupar'), 'sin ciudad, por la dirección completa');
+  assert.ok(!enCiudad(punto('La Paz', 'La Paz, Cesar, RAP Caribe, Colombia'), 'Valledupar'));
+  assert.ok(!enCiudad(punto('Agustín Codazzi', 'Calle 15, Agustín Codazzi, Cesar, RAP Caribe, 202050, Colombia'), 'Valledupar'));
+  assert.ok(!enCiudad(punto('San Diego', 'Carrera 8B, San Diego, Cesar, RAP Caribe, Colombia'), 'Valledupar'));
+  assert.ok(!enCiudad(punto('Bogotá ciudad', 'TransMilenio, Suba, Bogotá ciudad, Bogotá, Distrito Capital, Colombia'), 'Valledupar'));
+  assert.ok(enCiudad(punto('Bogotá ciudad', 'Suba, Bogotá, Distrito Capital, Colombia'), 'Bogotá'), 'la ciudad sale de la sucursal en TRIVO, no está fija');
+});
+
+test('un pedido con GPS fuera de la ciudad no llega a TRIVO', async () => {
+  reiniciarCaja();
+  olvidarMemoria();
+  respuestaPedido = () => new Response(JSON.stringify({ success: true, data: { uuid: 'a1b2c3d4-0000-4000-8000-000000000002', delivery_number: 13 } }), { status: 201 });
+  llamadas.length = 0;
+  let r = await pedir('pedido', { ...base, lat: 10.387, lng: -73.172 });
+  assert.equal(r.status, 409);
+  assert.deepEqual(await r.json(), { error: 'Tu ubicación queda en La Paz. Solo hacemos domicilios en Valledupar.', codigo: 'fuera_de_zona' });
+  assert.ok(!llamadas.some((l) => l.ruta.endsWith('/order/')), 'el pedido no se manda');
+
+  geoCaido = true;
+  r = await pedir('pedido', base);
+  assert.equal(r.status, 409);
+  assert.equal((await r.json()).codigo, 'sin_ubicacion', 'si no se puede confirmar la ubicación, tampoco');
+  assert.ok(!llamadas.some((l) => l.ruta.endsWith('/order/')));
+
+  r = await pedir('pedido', { ...base, lat: null, lng: null });
+  assert.equal(r.status, 200, 'sin GPS (dirección escrita) el pedido sale');
+  geoCaido = false;
+  r = await pedir('pedido', base);
+  assert.equal(r.status, 200, 'con GPS en Valledupar el pedido sale');
 });

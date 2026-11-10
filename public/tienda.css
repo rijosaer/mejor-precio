@@ -324,6 +324,7 @@ svg { width: 20px; height: 20px; flex: none; }
 .t-ubicar { width: 100%; min-height: 48px; }
 .t-ubicar.t-marcada { background: var(--celeste-suave); }
 .t-ubicar + .t-nota { margin-top: 6px; }
+.t-ubicar + .t-nota.t-fuera { padding: 10px 12px; border-radius: 12px; background: #fdecec; border: 1px solid #f2c4c4; color: #8a1c1c; font-size: .84rem; }
 .t-pagos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .t-pago { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border: 1.5px solid var(--borde); border-radius: 12px; font-size: .88rem; font-weight: 600; cursor: pointer; }
 .t-pago:has(input:checked) { border-color: var(--azul); background: var(--celeste-suave); }

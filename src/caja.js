@@ -181,6 +181,39 @@ async function leerJson(request) {
 
 const MENSAJE_CAIDA = 'No pudimos comunicarnos con la tienda. Puedes enviar este mismo pedido por WhatsApp.';
 
+// ── ¿La ubicación del GPS queda en la ciudad de la tienda? ───────────────────
+// TRIVO devuelve la ciudad del punto: «Perímetro Urbano Valledupar» en la
+// ciudad, «Valledupar» en los corregimientos (Valencia de Jesús…), y el nombre
+// propio en otro municipio («La Paz», «Agustín Codazzi»). La ciudad con la que
+// se compara es la de la sucursal en TRIVO: si la cambian allá, cambia aquí.
+const sinTildes = (x) =>
+  String(x ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+export function enCiudad(geo, ciudad) {
+  const c = sinTildes(ciudad);
+  if (!c) return true;
+  if (sinTildes(geo?.components?.city).includes(c)) return true;
+  return String(geo?.display_name || '')
+    .split(',')
+    .map(sinTildes)
+    .includes(c);
+}
+
+const ciudadDe = (geo) => String(geo?.components?.city || '').replace(/^Per[ií]metro Urbano\s+/i, '').trim() || 'otra ciudad';
+
+export const fueraDeZona = (geo, ciudad) => `Tu ubicación queda en ${ciudadDe(geo)}. Solo hacemos domicilios en ${ciudad}.`;
+
+async function ubicar(carta, lat, lng, tiempo = 3500) {
+  const r = await aTrivo('reverse-geocode/', { consulta: { lat, lng, branch_code: carta?.sucursal }, tiempo });
+  if (!r.ok || !r.datos) throw new SinTrivo(`Ubicación: HTTP ${r.estado}`);
+  return r.datos;
+}
+
 // /api/tienda/* (sin clave: es la tienda pública).
 export async function manejarCaja(request, { ip = '' } = {}) {
   const ruta = new URL(request.url).pathname.replace(/^\/api\/tienda/, '');
@@ -229,9 +262,20 @@ export async function manejarCaja(request, { ip = '' } = {}) {
       const lng = coordenada(e.lng, -82, -66);
       if (lat === null || lng === null) return json(400, { error: 'Esa ubicación está fuera de Colombia' });
       const carta = await cargarCarta();
-      const r = await aTrivo('reverse-geocode/', { consulta: { lat, lng, branch_code: carta?.sucursal } });
-      if (!r.ok) return json(502, { error: 'No pudimos leer la ubicación' });
-      return json(200, { direccion: String(r.datos?.address || ''), precision: String(r.datos?.precision || '') });
+      let geo;
+      try {
+        geo = await ubicar(carta, lat, lng, 6000);
+      } catch {
+        return json(502, { error: 'No pudimos leer la ubicación' });
+      }
+      const ciudad = carta?.ciudad || '';
+      const dentro = enCiudad(geo, ciudad);
+      return json(200, {
+        direccion: String(geo.address || ''),
+        precision: String(geo.precision || ''),
+        enZona: dentro,
+        ...(dentro ? {} : { error: fueraDeZona(geo, ciudad) }),
+      });
     }
 
     if (esPedido) {
@@ -240,7 +284,24 @@ export async function manejarCaja(request, { ip = '' } = {}) {
       if (!carta || carta.vieja) throw new SinTrivo('La carta no cargó');
       if (!carta.pedidos.enLinea) return json(409, { error: 'Los pedidos en línea están apagados en este momento.', codigo: 'apagado' });
       const { pedido } = armarPedido(carta, entrada, pagos);
-      const r = await aTrivo('order/', { metodo: 'POST', cuerpo: pedido, tiempo: 8500 });
+      // Con GPS, el punto tiene que quedar en la ciudad de la tienda. Si no se
+      // puede confirmar, el pedido no sale (el cliente puede quitar la
+      // ubicación y escribir la dirección).
+      if (pedido.lat !== undefined && carta.ciudad) {
+        let geo;
+        try {
+          geo = await ubicar(carta, pedido.lat, pedido.lng);
+        } catch {
+          return json(409, { error: 'No pudimos confirmar tu ubicación. Intenta de nuevo, o quita la ubicación y escribe la dirección.', codigo: 'sin_ubicacion' });
+        }
+        if (!enCiudad(geo, carta.ciudad)) {
+          console.log('[caja] pedido fuera de zona:', ciudadDe(geo));
+          return json(409, { error: fueraDeZona(geo, carta.ciudad), codigo: 'fuera_de_zona' });
+        }
+      }
+      // 3,5 s para ubicar + 6 s para el pedido: dentro de los 10 s de Netlify.
+      // Si se corta, reintentar no duplica (idempotency_key).
+      const r = await aTrivo('order/', { metodo: 'POST', cuerpo: pedido, tiempo: 6000 });
       if (!r.ok) {
         const detalle = r.datos?.detail || r.datos?.message;
         console.error('[caja] TRIVO rechazó el pedido:', r.estado, JSON.stringify(r.datos).slice(0, 300));
