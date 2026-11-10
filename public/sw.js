@@ -3,7 +3,7 @@
 // fueran nuevos). La página principal es la tienda pública: no se guarda aparte.
 // También recibe las notificaciones push del monitoreo.
 // Debe ser `mp-` + la versión más reciente de public/novedades.js.
-const VERSION = 'mp-2.7';
+const VERSION = 'mp-2.8';
 const ARCHIVOS = [
   'panel',
   'panel.html',

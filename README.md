@@ -2,7 +2,7 @@
 
 App web instalable en el teléfono que busca un producto en **Bevgo, Dislicores, Éxito, Makro, Olímpica, Agua Pure, D1 y tus proveedores propios** (más Carulla y Jumbo si las activas) y muestra cuál lo tiene más barato, agrupado por presentación (750 ml, 6 × 330 ml…). Es para uso privado de una o dos personas y se protege con una contraseña: vive en **`/panel`**.
 
-La página principal (`/`) es la **tienda pública de Agua Pure**, sin clave: los productos de su carta en TRIVO con foto y precio, «Comprar» hacia la carta de TRIVO y «Pedir» por WhatsApp, con SEO para Valledupar (ver docs/como-funciona.md §17).
+La página principal (`/`) es la **tienda pública de Agua Pure**, sin clave: los productos de su carta en TRIVO con foto, precio y presentaciones (por unidad, six pack y caja); el cliente arma el pedido ahí mismo con su ubicación y medio de pago, y el pedido entra a TRIVO; con SEO para Valledupar (ver docs/como-funciona.md §17).
 
 ## Qué precio muestra cada tienda
 

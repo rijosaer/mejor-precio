@@ -2,6 +2,7 @@
 // (server.js) y la función de Netlify (netlify/functions/api.mjs).
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { actualizar, enBlobs, leer } from './almacen.js';
+import { manejarCaja } from './caja.js';
 import { catalogoTiendas, comparar, estadoTiendas } from './comparador.js';
 import { guardarAjustesCompartidos, guardarConfig, leerAjustesCompartidos, leerConfig } from './config.js';
 import { borrarMovimiento, leerMovimientos, registrarMovimiento } from './inventario.js';
@@ -139,6 +140,9 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
   const metodo = request.method;
   try {
     if (ruta === '/api/salud') return json(200, { ok: true });
+
+    // La tienda pública (sin clave): medios de pago, domicilio y el pedido a TRIVO.
+    if (ruta.startsWith('/api/tienda/')) return await manejarCaja(request, { ip });
 
     if (!config().clave) return json(500, { error: 'Falta configurar APP_PASSWORD en el servidor' });
 

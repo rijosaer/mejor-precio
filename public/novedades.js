@@ -9,6 +9,28 @@ import { $, boton, el, guardado } from './util.js';
 
 export const VERSIONES = [
   {
+    version: '2.8',
+    fecha: '2026-11-09',
+    titulo: 'El pedido se hace en la tienda y entra a TRIVO',
+    cambios: [
+      {
+        titulo: 'Carrito y pedido en la tienda',
+        antes: '«Comprar» abría la carta de TRIVO y el cliente tenía que buscar otra vez el producto.',
+        ahora: 'El cliente agrega productos, pone su nombre, celular, dirección (o su ubicación por GPS) y el medio de pago, ve el domicilio y el total, y envía el pedido sin salir de la página. El pedido entra a TRIVO igual que uno de la carta, con la nota «Pedido hecho en la página web», y el cliente ve el número y en qué va. Si TRIVO no responde, puede mandar el mismo pedido por WhatsApp.',
+      },
+      {
+        titulo: 'Presentaciones',
+        antes: 'Un producto con presentaciones (Aguila lata caliente o fría) mostraba solo el precio más bajo.',
+        ahora: 'Se ven todas las presentaciones con su precio y el cliente escoge la que quiere antes de agregarla.',
+      },
+      {
+        titulo: 'Unidad, six pack y caja',
+        antes: 'Los productos salían en el orden de TRIVO, con cajas, unidades y six pack mezclados.',
+        ahora: 'En cada categoría van primero las unidades, luego los six pack y al final las cajas, cada grupo con su subtítulo.',
+      },
+    ],
+  },
+  {
     version: '2.7',
     fecha: '2026-11-09',
     titulo: 'La página principal es la tienda; esta app es el panel',
