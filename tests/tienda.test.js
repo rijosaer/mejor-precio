@@ -182,6 +182,14 @@ test('cada sección va por unidad, luego six pack, luego caja; con subtítulos s
   assert.match(bloque, /<h4><a href="\/producto\//, 'debajo de un subtítulo, el producto es h4');
   const hielo = html.slice(html.indexOf('id="hielo"'), html.indexOf('id="cervezas"'));
   assert.ok(!hielo.includes('t-subgrupo'), 'si todo es por unidad no hay subtítulos');
+  const agua = html.slice(html.indexOf('id="agua"'), html.indexOf('id="hielo"'));
+  assert.ok(!agua.includes('t-subgrupo'), 'el agua «paquete x 24» no es una caja');
+  assert.equal(presentacion('Agua Cristal 600 ml · paquete x 24'), 0);
+  assert.deepEqual(
+    c.secciones.find((s) => s.id === 'agua').productos.map((p) => p.nombre),
+    ['Agua Cristal 300 ml · paquete x 12', 'Agua Cristal 600 ml · paquete x 24', 'Agua Cristal 1000 ml · paquete x 12', 'Bolsas de agua x 40'],
+    'el agua de la más chica a la más grande',
+  );
 });
 
 test('presentaciones: la Aguila lata se ve con Caliente y Fría, cada una con su precio', async () => {

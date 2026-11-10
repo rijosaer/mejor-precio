@@ -36,11 +36,12 @@ const nombreVariante = (nombre) => {
   return n.charAt(0).toLocaleUpperCase('es-CO') + n.slice(1);
 };
 
-// 0 = por unidad, 1 = six pack, 2 = caja (x 24): el orden en que se muestran.
+// 0 = por unidad, 1 = six pack, 2 = caja: el orden en que se muestran. Solo es
+// caja lo que dice «caja» (el agua «paquete x 24» sigue con los paquetes).
 export const GRUPOS = ['Por unidad', 'Six pack', 'Cajas'];
 export function presentacion(nombre) {
   const n = String(nombre || '').toLowerCase();
-  if (/\bcaja\b|\bx\s*24\b/.test(n)) return 2;
+  if (/\bcaja\b/.test(n)) return 2;
   if (/\bsix\s*-?\s*pack\b|\bx\s*6\s*unidades\b/.test(n)) return 1;
   return 0;
 }
