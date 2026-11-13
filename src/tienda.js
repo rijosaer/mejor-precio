@@ -51,6 +51,16 @@ export function presentacion(nombre) {
   return 0;
 }
 
+// El nombre que el negocio le puso a la promoción en TRIVO («Envio gratis» → «Envío gratis»).
+const textoPromo = (nombre) => {
+  const t = String(nombre || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40)
+    .replace(/\benvio\b/gi, (m) => (m[0] === 'E' ? 'Envío' : 'envío'));
+  return t.charAt(0).toLocaleUpperCase('es-CO') + t.slice(1);
+};
+
 // «Caja de cerveza Heineken x 24» y «Six pack Heineken» se ordenan por «Heineken».
 const claveOrden = (nombre) =>
   nombre
@@ -163,6 +173,7 @@ export function armarCarta(datos, { t = Date.now() } = {}) {
             descripcion: String(p.description || '').trim(),
             precio,
             antes: precio < lista ? lista : null,
+            nombrePromo: precio < lista ? textoPromo(p.active_promo?.name) : '',
             desde: new Set(precios).size > 1,
             variantes,
             grupo: presentacion(nombre),
@@ -605,17 +616,21 @@ const avisoViejo = (carta) => (carta.vieja ? '<p class="t-aviso">Estos precios s
 
 const todos = (carta) => carta.secciones.flatMap((s) => s.productos.map((p) => ({ p, s })));
 
-// La promoción de la portada: la de mayor descuento; si no hay, lo destacado.
-function productoPortada(carta) {
+// Las promociones de hoy: las que TRIVO tiene activas ahora (de la de mayor
+// descuento a la de menor). Si no hay, lo destacado con foto.
+export function promosDelDia(carta) {
   const lista = todos(carta).filter(({ p }) => p.disponible);
   const promos = lista.filter(({ p }) => p.antes).sort((a, b) => b.p.antes / b.p.precio - a.p.antes / a.p.precio);
-  if (promos.length) return { ...promos[0], promo: true };
-  const destacado = lista.find(({ p }) => p.destacado && p.imagen);
-  return destacado ? { ...destacado, promo: false } : null;
+  if (promos.length) return promos.slice(0, 10).map((x) => ({ ...x, promo: true }));
+  return lista
+    .filter(({ p }) => p.destacado && p.imagen)
+    .slice(0, 4)
+    .map((x) => ({ ...x, promo: false }));
 }
 
-// «Recomendados»: lo destacado, unas promociones y lo primero de cada categoría.
-function recomendados(carta, portada) {
+// «Recomendados»: lo destacado, unas promociones y lo primero de cada categoría
+// (sin repetir lo que ya sale en el carrusel).
+function recomendados(carta, enCarrusel = []) {
   const lista = todos(carta).filter(({ p }) => p.disponible);
   const elegidos = [
     ...lista.filter(({ p }) => p.destacado),
@@ -623,28 +638,58 @@ function recomendados(carta, portada) {
     ...carta.secciones.map((s) => s.productos.find((p) => p.disponible && p.imagen) || s.productos.find((p) => p.disponible)).filter(Boolean).map((p) => ({ p })),
     ...lista.filter(({ p }) => p.imagen),
   ];
-  const vistos = new Set(portada ? [portada.p.id] : []);
+  const vistos = new Set(enCarrusel.map(({ p }) => p.id));
   return elegidos.filter(({ p }) => !vistos.has(p.id) && vistos.add(p.id)).slice(0, 6).map(({ p }) => p);
 }
 
-function bannerPortada(x, carta) {
-  const { p } = x;
-  return `<section class="t-promo" aria-labelledby="t-promo">
-  <div class="t-promo-texto">
-    <span class="t-promo-ceja">${x.promo ? 'En promoción' : 'Recomendado'}</span>
-    <h2 id="t-promo">${esc(p.nombre)} a ${precioTexto(p.precio)}</h2>
-    <p>${p.antes ? `Antes ${precioTexto(p.antes)}. ` : ''}Te lo llevamos a tu puerta en ${esc(carta.ciudad)}.</p>
-    <div class="t-promo-botones"><a class="t-boton" href="${esc(rutaProducto(p))}">Pedir ya</a><a class="t-boton t-boton-borde" href="/productos">Ver todos los productos</a></div>
+const ICONO_PAUSA = svg('M9 6v12M15 6v12');
+const ICONO_ANTERIOR = svg('M15 6l-6 6 6 6');
+const ICONO_SIGUIENTE = svg('M9 6l6 6-6 6');
+
+// El carrusel: se desliza con el dedo; con JavaScript pasa solo, con puntos,
+// flechas y pausa (public/tienda.js). La foto va sobre blanco, con sus colores.
+function carruselPromos(promos) {
+  const n = promos.length;
+  const diapositivas = promos
+    .map(({ p, promo }, i) => {
+      const ruta = esc(rutaProducto(p));
+      const pct = p.antes ? Math.round((1 - p.precio / p.antes) * 100) : 0;
+      const foto = p.imagen
+        ? `<img src="${esc(p.imagen)}" alt="" width="400" height="400" ${i === 0 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`
+        : sinFoto();
+      return `<article class="t-promo" id="t-promo-${i + 1}" role="group" aria-roledescription="diapositiva" aria-label="${i + 1} de ${n}: ${esc(p.nombre)}">
+    <div class="t-promo-texto">
+      <p class="t-promo-ceja">${promo ? 'Promoción de hoy' : 'Recomendado'}${p.nombrePromo ? ` · ${esc(p.nombrePromo)}` : ''}</p>
+      <h2 class="t-promo-nombre">${esc(p.nombre)}</h2>
+      <p class="t-promo-precio"><strong>${precioTexto(p.precio)}</strong>${p.antes ? `<del>${precioTexto(p.antes)}</del>${pct > 0 ? `<span class="t-promo-pct">−${pct}%</span>` : ''}` : ''}</p>
+      <div class="t-promo-botones"><a class="t-boton" href="${ruta}">Pedir ya</a><a class="t-boton t-boton-borde" href="${promo ? '/productos?oferta=1' : '/productos'}">${promo ? 'Ver todas las promociones' : 'Ver todos los productos'}</a></div>
+    </div>
+    <a class="t-promo-foto" href="${ruta}" tabindex="-1" aria-hidden="true">${foto}</a>
+  </article>`;
+    })
+    .join('\n');
+  const controles =
+    n > 1
+      ? `<div class="t-promos-control" data-control hidden>
+    <button type="button" class="t-promos-boton" data-pausa aria-label="Pausar las promociones">${ICONO_PAUSA}</button>
+    <div class="t-promos-puntos">${promos.map((_, i) => `<button type="button" data-punto="${i}" aria-label="Promoción ${i + 1} de ${n}"${i === 0 ? ' aria-current="true"' : ''}></button>`).join('')}</div>
+    <button type="button" class="t-promos-boton t-promos-flecha" data-paso="-1" aria-label="Promoción anterior">${ICONO_ANTERIOR}</button>
+    <button type="button" class="t-promos-boton t-promos-flecha" data-paso="1" aria-label="Siguiente promoción">${ICONO_SIGUIENTE}</button>
+  </div>`
+      : '';
+  return `<section class="t-promos" aria-roledescription="carrusel" aria-label="${promos[0].promo ? 'Promociones de hoy' : 'Recomendados'}" data-carrusel>
+  <div class="t-promos-pista" data-pista>
+  ${diapositivas}
   </div>
-  ${p.imagen ? `<img class="t-promo-foto" src="${esc(p.imagen)}" alt="" width="400" height="400" fetchpriority="high" decoding="async">` : ''}
+  ${controles}
 </section>`;
 }
 
 export function paginaHtml(carta, { base }) {
   const { titulo, descripcion, enLista } = textosSeo(carta);
   const pendientes = { fotos: 4 };
-  const portada = productoPortada(carta);
-  const reco = recomendados(carta, portada);
+  const promos = promosDelDia(carta);
+  const reco = recomendados(carta, promos);
   const categorias = carta.secciones
     .map((s) => `<li><a href="${rutaCategoria(s)}"><span class="t-cat-icono">${iconoCategoria(s.nombre)}</span><span>${esc(s.nombre)}</span></a></li>`)
     .join('');
@@ -662,7 +707,7 @@ ${s.productos
     )
     .join('\n');
 
-  return `${cabeza(carta, { titulo, descripcion, canonica: `${base}/`, imagen: portada?.p.imagen, datos: ld(negocioLd(carta, base), catalogoLd(carta, base)) + datosPagina(carta), clase: 't-en-inicio' })}
+  return `${cabeza(carta, { titulo, descripcion, canonica: `${base}/`, imagen: promos[0]?.p.imagen, datos: ld(negocioLd(carta, base), catalogoLd(carta, base)) + datosPagina(carta), clase: 't-en-inicio' })}
 ${cabecera(carta, { actual: 'inicio' })}
 <main class="t-principal" id="contenido">
 <div class="t-ancho">
@@ -674,7 +719,7 @@ ${cabecera(carta, { actual: 'inicio' })}
       ${hechos(carta)}
       ${carta.pedidos.nota ? `<p class="t-info-nota">${esc(carta.pedidos.nota)}</p>` : ''}
     </section>
-    ${portada ? bannerPortada(portada, carta) : ''}
+    ${promos.length ? carruselPromos(promos) : ''}
   </div>
   <section class="t-bloque" aria-labelledby="t-cats">
     <div class="t-bloque-cab"><h2 id="t-cats">¿Qué se te antoja?</h2></div>
@@ -742,11 +787,13 @@ export function filtrarCarta(carta, buscar) {
 
 // Una categoría («/categoria/cervezas») o todos los productos («/productos»,
 // con «?buscar=» para el buscador sin JavaScript).
-export function paginaCategoria(carta, { base, seccion = null, buscar = '' }) {
+export function paginaCategoria(carta, { base, seccion = null, buscar = '', oferta = false }) {
   const pendientes = { fotos: 4 };
-  const secciones = seccion ? [seccion] : filtrarCarta(carta, buscar);
+  const secciones = (seccion ? [seccion] : filtrarCarta(carta, buscar))
+    .map((s) => (oferta ? { ...s, productos: s.productos.filter((p) => p.antes) } : s))
+    .filter((s) => s.productos.length);
   const productos = secciones.flatMap((s) => s.productos);
-  const titulo = seccion ? seccion.nombre : buscar ? `Resultados para «${buscar}»` : 'Todos los productos';
+  const titulo = seccion ? seccion.nombre : buscar ? `Resultados para «${buscar}»` : oferta ? 'Promociones de hoy' : 'Todos los productos';
   const ruta = seccion ? rutaCategoria(seccion) : '/productos';
   const tituloSeo = seccion ? `${seccion.nombre} a domicilio en ${carta.ciudad} | ${carta.marca}` : `Productos a domicilio en ${carta.ciudad} | ${carta.marca}`;
   const descripcion = seccion
@@ -769,8 +816,8 @@ export function paginaCategoria(carta, { base, seccion = null, buscar = '' }) {
   return `${cabeza(carta, {
     titulo: tituloSeo,
     descripcion,
-    canonica: buscar ? null : `${base}${ruta}`,
-    robots: buscar ? 'noindex, follow' : undefined,
+    canonica: buscar || oferta ? null : `${base}${ruta}`,
+    robots: buscar || oferta ? 'noindex, follow' : undefined,
     datos: ld(catalogoLd(carta, base, secciones), migasLd(base, [['Inicio', `${base}/`], [seccion ? seccion.nombre : 'Productos', `${base}${ruta}`]])) + datosPagina(carta),
     clase: 't-en-lista',
   })}
@@ -1018,7 +1065,7 @@ export async function responderTienda(request, { ahora = Date.now() } = {}) {
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 60);
-    return new Response(paginaCategoria(carta, { base, buscar }), { headers: HTML });
+    return new Response(paginaCategoria(carta, { base, buscar, oferta: url.searchParams.get('oferta') === '1' }), { headers: HTML });
   }
   return new Response(paginaHtml(carta, { base }), { headers: HTML });
 }

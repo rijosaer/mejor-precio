@@ -146,17 +146,54 @@ svg { width: 22px; height: 22px; flex: none; }
 .t-hechos dt { font-size: 11px; color: var(--gris); }
 .t-hechos dd { margin: 0; font-weight: 800; font-size: 15px; }
 .t-info-nota { margin: 12px 0 0; padding: 9px 12px; border-radius: 12px; background: var(--suave); color: var(--oscuro); font-size: 12px; font-weight: 700; }
+/* Promociones de hoy: un carrusel con el color de la tienda. Se desliza con el
+   dedo; con JavaScript pasa solo (con pausa). La foto va sobre blanco, con sus
+   colores de verdad. */
+.t-promos { position: relative; border-radius: 22px; background: var(--marca); color: #fff; overflow: hidden; }
+.t-promos :focus-visible { outline-color: #fff; }
+.t-promos-pista { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.t-promos-pista::-webkit-scrollbar { display: none; }
 .t-promo {
-  display: flex; align-items: center; gap: 12px; padding: 18px 16px 18px 20px;
-  border-radius: 22px; background: var(--amarillo); color: var(--tinta);
+  flex: 0 0 100%; min-width: 0; scroll-snap-align: start; scroll-snap-stop: always;
+  display: flex; align-items: center; gap: 14px; padding: 18px 16px 14px 20px;
 }
 .t-promo-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.t-promo-ceja { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
-.t-promo h2 { margin: 0; font-size: 23px; line-height: 1.05; }
-.t-promo p { margin: 0; font-size: 13px; line-height: 1.35; }
+.t-promo-ceja { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.85); }
+.t-promo-nombre {
+  margin: 0; font-size: 21px; line-height: 1.08; color: #fff;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.t-promo-precio { margin: 2px 0 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+.t-promo-precio strong { font: 800 26px var(--titulos); letter-spacing: -0.02em; }
+.t-promo-precio del { font-size: 13px; color: rgba(255, 255, 255, 0.78); }
+.t-promo-pct { align-self: center; padding: 2px 8px; border-radius: 8px; background: #fff; color: var(--oscuro); font-size: 12px; font-weight: 800; }
 .t-promo-botones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
-.t-promo-botones .t-boton-borde { display: none; }
-.t-promo-foto { width: 108px; height: 108px; object-fit: contain; mix-blend-mode: multiply; flex: none; }
+.t-promo .t-boton { background: #fff; color: var(--oscuro); }
+.t-promo .t-boton-borde { display: none; background: transparent; color: #fff; border: 2px solid rgba(255, 255, 255, 0.7); }
+.t-promo-foto {
+  flex: none; width: 112px; height: 112px; border-radius: 18px; background: #fff; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.t-promo-foto img { width: 100%; height: 100%; object-fit: contain; }
+.t-promo-foto .t-sinfoto { color: #cbc4b0; }
+.t-promos-control { display: flex; align-items: center; gap: 8px; padding: 0 16px 12px 20px; }
+.t-promos-puntos { flex: 1; display: flex; align-items: center; flex-wrap: wrap; }
+.t-promos-puntos button {
+  width: 24px; height: 28px; padding: 0; border: 0; background: none;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.t-promos-puntos button::before { content: ''; width: 8px; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.45); }
+.t-promos-puntos button[aria-current='true']::before { width: 20px; background: #fff; }
+.t-promos-boton {
+  flex: none; width: 36px; height: 36px; border: 0; border-radius: 12px; background: rgba(255, 255, 255, 0.16); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.t-promos-boton svg { width: 18px; height: 18px; }
+.t-promos-boton:hover { background: rgba(255, 255, 255, 0.26); }
+.t-promos-flecha { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .t-promos-puntos button::before { transition: width 0.25s ease, background-color 0.25s ease; }
+}
 
 /* ── Botones ────────────────────────────────────────────────────────────── */
 .t-boton {
@@ -512,13 +549,18 @@ svg { width: 22px; height: 22px; flex: none; }
   .t-con-carrito .t-pie, .t-pie { padding-bottom: 96px; }
 
   .t-portada { flex-direction: row; flex-wrap: wrap; align-items: stretch; gap: 20px; margin-top: 28px; }
-  .t-promo { order: -1; flex: 999 1 560px; min-width: 0; padding: 36px 36px 36px 44px; border-radius: 28px; gap: 24px; }
-  .t-promo h2 { font-size: 44px; line-height: 1; letter-spacing: -0.04em; }
-  .t-promo p { font-size: 17px; max-width: 440px; }
+  .t-promos { order: -1; flex: 999 1 560px; min-width: 0; border-radius: 28px; }
+  .t-promo { padding: 32px 36px 18px 44px; gap: 28px; }
+  .t-promo-nombre { font-size: 38px; line-height: 1.02; letter-spacing: -0.04em; -webkit-line-clamp: 2; }
+  .t-promo-precio strong { font-size: 40px; }
+  .t-promo-precio del { font-size: 16px; }
+  .t-promo-pct { font-size: 14px; }
   .t-promo-ceja { font-size: 12px; letter-spacing: 0.16em; }
   .t-promo-botones .t-boton { min-height: 50px; padding: 0 24px; font-size: 15px; }
-  .t-promo-botones .t-boton-borde { display: inline-flex; }
-  .t-promo-foto { width: 240px; height: 240px; }
+  .t-promo .t-boton-borde { display: inline-flex; }
+  .t-promo-foto { width: 230px; height: 230px; border-radius: 24px; }
+  .t-promos-control { padding: 0 36px 20px 44px; }
+  .t-promos-flecha { display: inline-flex; }
   .t-info { flex: 1 1 320px; padding: 26px; border-radius: 28px; box-shadow: none; display: flex; flex-direction: column; justify-content: center; }
   .t-info h1 { font-size: 24px; }
   .t-hechos { grid-template-columns: repeat(2, minmax(0, 1fr)); }

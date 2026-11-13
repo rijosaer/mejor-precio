@@ -21,7 +21,7 @@ export const VERSIONES = [
       {
         titulo: 'Inicio nuevo',
         antes: 'Una sola página larga con todos los productos.',
-        ahora: 'Arriba si la tienda está abierta (y hasta qué hora), a dónde se entrega y el buscador; luego el domicilio y el pedido mínimo, la promoción con más descuento, las categorías, recomendados y una fila por categoría.',
+        ahora: 'Arriba si la tienda está abierta (y hasta qué hora), a dónde se entrega y el buscador; luego el domicilio y el pedido mínimo, un carrusel con las promociones de hoy (pasa solo, se desliza y tiene pausa; con el color de la tienda y la foto con sus colores), las categorías, recomendados y una fila por categoría. «Ver todas las promociones» muestra solo lo que está en promoción.',
       },
       {
         titulo: 'Categorías y buscador',

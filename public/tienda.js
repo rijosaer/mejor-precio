@@ -267,6 +267,69 @@ function iniciarBuscador() {
 }
 iniciarBuscador();
 
+// ── Carrusel de promociones: pasa solo cada 6 s y se detiene cuando lo usan ─
+function iniciarCarrusel() {
+  const caja = document.querySelector('[data-carrusel]');
+  const pista = caja?.querySelector('[data-pista]');
+  const control = caja?.querySelector('[data-control]');
+  if (!pista || !control) return;
+  const total = pista.children.length;
+  const puntos = [...control.querySelectorAll('[data-punto]')];
+  const pausa = control.querySelector('[data-pausa]');
+  const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let actual = 0;
+  let pausado = quieto; // con «reducir movimiento» no pasa solo (se puede activar)
+  let enUso = false; // el cliente lo está mirando, tocando o recorriendo con el teclado
+  control.hidden = false;
+
+  const marcar = () => puntos.forEach((p, i) => p.setAttribute('aria-current', String(i === actual)));
+  const ir = (i) => {
+    actual = (i + total) % total;
+    pista.scrollTo({ left: actual * pista.clientWidth, behavior: quieto ? 'auto' : 'smooth' });
+    marcar();
+  };
+  const pintarPausa = () => {
+    pausa.innerHTML = svgTexto(pausado ? 'M8 5.5v13l11-6.5-11-6.5Z' : 'M9 6v12M15 6v12');
+    pausa.setAttribute('aria-label', pausado ? 'Pasar las promociones solas' : 'Pausar las promociones');
+  };
+
+  // Al deslizar con el dedo, el punto sigue a la promoción que quedó a la vista.
+  let tiempo;
+  pista.addEventListener(
+    'scroll',
+    () => {
+      clearTimeout(tiempo);
+      tiempo = setTimeout(() => {
+        actual = Math.round(pista.scrollLeft / pista.clientWidth);
+        marcar();
+      }, 90);
+    },
+    { passive: true },
+  );
+  control.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.punto) ir(Number(b.dataset.punto));
+    else if (b.dataset.paso) ir(actual + Number(b.dataset.paso));
+    else if (b === pausa) {
+      pausado = !pausado;
+      pintarPausa();
+    }
+  });
+  caja.addEventListener('pointerenter', () => (enUso = true));
+  caja.addEventListener('pointerleave', () => (enUso = false));
+  caja.addEventListener('focusin', () => (enUso = true));
+  caja.addEventListener('focusout', () => (enUso = false));
+  pista.addEventListener('touchstart', () => (enUso = true), { passive: true });
+  pista.addEventListener('touchend', () => setTimeout(() => (enUso = false), 4000), { passive: true });
+  addEventListener('resize', () => pista.scrollTo({ left: actual * pista.clientWidth }));
+  setInterval(() => {
+    if (!pausado && !enUso && !document.hidden) ir(actual + 1);
+  }, 6000);
+  pintarPausa();
+}
+iniciarCarrusel();
+
 // ── El pedido ───────────────────────────────────────────────────────────────
 if (D?.productos) iniciarPedido(D);
 
