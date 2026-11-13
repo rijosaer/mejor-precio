@@ -38,6 +38,21 @@ export const VERSIONES = [
         antes: 'El pedido iba en dos pasos y el seguimiento era una lista corta.',
         ahora: 'Productos, entrega, pago y total en una sola hoja (con los datos de la vez pasada y «Cambiar»). «Mis pedidos» muestra el estado paso a paso con la hora, el detalle y un botón para escribirle a la tienda; cuando el pedido termina (y hasta 60 días después) sale «Pedir otra vez», que vuelve a poner lo mismo en el carrito con los precios de hoy. Si en TRIVO hay una promoción de domicilio gratis, el inicio dice desde cuánto y el pedido muestra «Te faltan $X para el domicilio gratis» con una barra. Sin mapa: la tienda no comparte dónde va el domiciliario.',
       },
+      {
+        titulo: 'Mayoría de edad y datos personales',
+        antes: 'La tienda no preguntaba la edad ni pedía autorización para usar los datos del cliente.',
+        ahora: 'Al entrar se pregunta si es mayor de edad (una vez cada 30 días). Hay términos de venta y una política de datos (Ley 1581 de 2012) con el responsable que se pone en Ajustes → Tienda en línea (nombre o razón social, NIT o cédula, correo). Para pedir hay que marcar la casilla de mayoría de edad y autorización; el servidor también lo revisa.',
+      },
+      {
+        titulo: 'Existencias y promociones de TRIVO',
+        antes: 'No se veía cuando quedaban pocas unidades, y una promoción sin precio rebajado (2x1, por cantidad) no se mostraba.',
+        ahora: 'Cuando TRIVO avisa que quedan pocas, sale «¡Últimas N unidades!» y no se puede pedir más de eso (en 0, agotado). Las promociones sin precio rebajado salen con el nombre que les puso el negocio, también en el carrusel y en «Ver todas las promociones». La etiqueta de la tarjeta dice el descuento (−19%).',
+      },
+      {
+        titulo: 'Más rápida',
+        antes: 'Cada foto de producto bajaba completa (unos 90 KB).',
+        ahora: 'Las fotos se descargan del tamaño en que se ven y en formato liviano (unos 5 KB en las tarjetas). Lighthouse en teléfono: velocidad 96, accesibilidad 100, buenas prácticas 100.',
+      },
     ],
   },
   {

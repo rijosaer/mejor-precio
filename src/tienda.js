@@ -167,6 +167,10 @@ export function armarCarta(datos, { t = Date.now() } = {}) {
           const promo = !variantes.length && p.active_promo ? Number(p.active_promo.promo_price) : null;
           const precio = promo && promo < lista ? promo : lista;
           const nombre = nombreVisible(p.name);
+          // Existencias: TRIVO solo las manda cuando quedan pocas («¡Últimas N
+          // unidades!» en su carta); en 0, agotado.
+          const quedan = p.stock_left == null || p.stock_left === '' ? null : Number(p.stock_left);
+          const existencias = Number.isFinite(quedan) ? Math.max(0, Math.floor(quedan)) : null;
           return {
             id: p.id,
             nombre,
@@ -174,11 +178,15 @@ export function armarCarta(datos, { t = Date.now() } = {}) {
             precio,
             antes: precio < lista ? lista : null,
             nombrePromo: precio < lista ? textoPromo(p.active_promo?.name) : '',
+            // Promociones sin precio rebajado en la carta (2x1, por cantidad…): se
+            // muestran con el nombre que les puso el negocio.
+            promoSinPrecio: !(precio < lista) && p.active_promo?.name ? textoPromo(p.active_promo.name) : '',
+            existencias: existencias > 0 ? existencias : null,
             desde: new Set(precios).size > 1,
             variantes,
             grupo: presentacion(nombre),
             imagen: absoluta(p.image_url),
-            disponible: p.is_available !== false,
+            disponible: p.is_available !== false && existencias !== 0,
             destacado: destacados.has(p.id) || Boolean(p.is_featured),
           };
         })
@@ -359,10 +367,39 @@ const iconoCategoria = (nombre) => svg((ICONOS_CATEGORIA.find(([re]) => re.test(
 
 const sinFoto = () => `<span class="t-sinfoto">${ICONOS.destello}</span>`;
 
-const foto = (p, pendientes, tam = 400) =>
+// Las fotos de TRIVO (unos 90 KB cada una) pasan por el CDN de imágenes de
+// Netlify: del ancho en que se ven y en formato moderno (AVIF o WebP). Fuera de
+// Netlify (pruebas, servidor local) va la foto original. netlify.toml permite
+// las fotos de trivo-pos.com.
+const enNetlify = () => typeof globalThis.Netlify !== 'undefined';
+export const fotoCdn = (url, w) => `/.netlify/images?url=${encodeURIComponent(url)}&w=${w}&q=75`;
+
+function imgFoto(url, { alt = '', anchos, sizes, tam, prioridad = false }) {
+  const carga = prioridad ? 'fetchpriority="high"' : 'loading="lazy"';
+  if (!enNetlify()) return `<img src="${esc(url)}" alt="${esc(alt)}" width="${tam}" height="${tam}" ${carga} decoding="async">`;
+  const srcset = anchos.map((w) => `${fotoCdn(url, w)} ${w}w`).join(', ');
+  return `<img src="${esc(fotoCdn(url, anchos.at(-1)))}" srcset="${esc(srcset)}" sizes="${sizes}" alt="${esc(alt)}" width="${tam}" height="${tam}" ${carga} decoding="async">`;
+}
+
+// En rejilla la foto se ve de unos 170 a 200 px; en lista, de 92 px.
+const foto = (p, pendientes, modo = 'rejilla') =>
   p.imagen
-    ? `<img src="${esc(p.imagen)}" alt="" width="${tam}" height="${tam}" ${pendientes.fotos-- > 0 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`
+    ? imgFoto(p.imagen, {
+        anchos: modo === 'lista' ? [120, 240] : [240, 400, 600],
+        sizes: modo === 'lista' ? '92px' : '(min-width: 900px) 200px, 45vw',
+        tam: 400,
+        prioridad: pendientes.fotos-- > 0,
+      })
     : sinFoto();
+
+// «¡Últimas 3 unidades!», como lo dice la carta de TRIVO.
+const textoQuedan = (n) => (n === 1 ? '¡Última unidad!' : `¡Últimas ${n} unidades!`);
+const quedanHtml = (p) => (p.disponible && p.existencias ? `<p class="t-quedan">${textoQuedan(p.existencias)}</p>` : '');
+const selloTarjeta = (p) => {
+  if (p.antes) return `<span class="t-sello">−${Math.round((1 - p.precio / p.antes) * 100)}%</span>`;
+  if (p.promoSinPrecio) return `<span class="t-sello">${esc(p.promoSinPrecio.slice(0, 22))}</span>`;
+  return '';
+};
 
 const detalleTarjeta = (p) => (p.variantes.length > 1 ? p.variantes.map((v) => v.nombre).join(' · ') : '');
 
@@ -377,14 +414,15 @@ const precioTarjeta = (p) =>
   `<p class="t-prod-precio">${p.desde ? '<small>Desde</small>' : ''}<strong>${precioTexto(p.precio)}</strong>${p.antes ? `<del>${precioTexto(p.antes)}</del>` : ''}</p>`;
 
 // Una tarjeta de producto: en rejilla (inicio) o en lista (categorías).
-function tarjeta(p, pendientes, nivel = 3) {
+function tarjeta(p, pendientes, nivel = 3, modo = 'rejilla') {
   const ruta = rutaProducto(p);
   const detalle = detalleTarjeta(p);
-  return `<li class="t-prod${p.disponible ? '' : ' t-no'}" data-grupo="${p.grupo}" data-precio="${p.precio}"${p.antes ? ' data-oferta' : ''}>
-  <a class="t-prod-foto" href="${esc(ruta)}" tabindex="-1" aria-hidden="true">${foto(p, pendientes)}${p.antes ? '<span class="t-sello">Oferta</span>' : ''}</a>
+  return `<li class="t-prod${p.disponible ? '' : ' t-no'}" data-grupo="${p.grupo}" data-precio="${p.precio}"${p.antes || p.promoSinPrecio ? ' data-oferta' : ''}>
+  <a class="t-prod-foto" href="${esc(ruta)}" tabindex="-1" aria-hidden="true">${foto(p, pendientes, modo)}${selloTarjeta(p)}</a>
   <div class="t-prod-texto">
     <h${nivel} class="t-prod-nombre"><a href="${esc(ruta)}">${esc(p.nombre)}</a></h${nivel}>
     ${detalle ? `<p class="t-prod-detalle">${esc(detalle)}</p>` : ''}
+    ${quedanHtml(p)}
     <div class="t-prod-pie">${precioTarjeta(p)}${botonMas(p)}</div>
   </div>
 </li>`;
@@ -400,9 +438,10 @@ function datosPagina(carta) {
         n: p.nombre,
         p: p.precio,
         a: p.antes,
-        f: p.imagen,
+        f: p.imagen && enNetlify() ? fotoCdn(p.imagen, 400) : p.imagen,
         u: rutaProducto(p),
         ok: p.disponible,
+        q: p.existencias,
         s: s.nombre,
         g: p.grupo,
         v: p.variantes.map((v) => ({ id: v.id, n: v.nombre, p: v.precio })),
@@ -601,6 +640,7 @@ function pie(carta, actual) {
     ${t.lema ? `<p>${esc(t.lema)}</p>` : ''}
     <p>Domicilios en ${esc(carta.ciudad)}, Cesar${carta.direccion ? ` · ${esc(carta.direccion)}` : ''}${carta.telefono ? ` · <a href="tel:+57${esc(carta.telefono)}">${esc(telefonoTexto(carta.telefono))}</a>` : ''}${wa ? ` · <a href="${esc(wa)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</p>
     ${carta.pedidos.nota ? `<p>${esc(carta.pedidos.nota)}</p>` : ''}
+    <p class="t-pie-legal"><a href="/terminos">Términos de venta</a> · <a href="/privacidad">Política de datos</a></p>
     <p class="t-pie-nota">Precios en pesos colombianos (actualizados el ${esc(fechaTexto(carta.t))}). La venta de bebidas alcohólicas es solo para mayores de edad. El exceso de alcohol es perjudicial para la salud.</p>
   </div>
 </footer>
@@ -637,7 +677,8 @@ export function promosDelDia(carta) {
   const lista = todos(carta).filter(({ p }) => p.disponible);
   const descuento = ({ p }) => p.antes / p.precio;
   const porSeccion = new Map();
-  for (const x of lista.filter(({ p }) => p.antes).sort((a, b) => descuento(b) - descuento(a))) {
+  const conPromo = [...lista.filter(({ p }) => p.antes).sort((a, b) => descuento(b) - descuento(a)), ...lista.filter(({ p }) => !p.antes && p.promoSinPrecio)];
+  for (const x of conPromo) {
     if (!porSeccion.has(x.s.id)) porSeccion.set(x.s.id, []);
     porSeccion.get(x.s.id).push(x);
   }
@@ -678,18 +719,16 @@ function carruselPromos(promos) {
     .map(({ p, promo }, i) => {
       const ruta = esc(rutaProducto(p));
       const pct = p.antes ? Math.round((1 - p.precio / p.antes) * 100) : 0;
-      const foto = p.imagen
-        ? `<img src="${esc(p.imagen)}" alt="" width="400" height="400" ${i === 0 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`
-        : sinFoto();
-      return `<article class="t-promo" id="t-promo-${i + 1}" role="group" aria-roledescription="diapositiva" aria-label="${i + 1} de ${n}: ${esc(p.nombre)}">
+      const foto = p.imagen ? imgFoto(p.imagen, { anchos: [160, 320, 480], sizes: '(min-width: 900px) 230px, 112px', tam: 400, prioridad: i === 0 }) : sinFoto();
+      return `<div class="t-promo" id="t-promo-${i + 1}" role="group" aria-roledescription="diapositiva" aria-label="${i + 1} de ${n}: ${esc(p.nombre)}">
     <div class="t-promo-texto">
-      <p class="t-promo-ceja">${promo ? 'Promoción de hoy' : 'Recomendado'}${p.nombrePromo ? ` · ${esc(p.nombrePromo)}` : ''}</p>
+      <p class="t-promo-ceja">${promo ? 'Promoción de hoy' : 'Recomendado'}${p.nombrePromo || p.promoSinPrecio ? ` · ${esc(p.nombrePromo || p.promoSinPrecio)}` : ''}</p>
       <h2 class="t-promo-nombre">${esc(p.nombre)}</h2>
       <p class="t-promo-precio"><strong>${precioTexto(p.precio)}</strong>${p.antes ? `<del>${precioTexto(p.antes)}</del>${pct > 0 ? `<span class="t-promo-pct">−${pct}%</span>` : ''}` : ''}</p>
       <div class="t-promo-botones"><a class="t-boton" href="${ruta}">Pedir ya</a><a class="t-boton t-boton-borde" href="${promo ? '/productos?oferta=1' : '/productos'}">${promo ? 'Ver todas las promociones' : 'Ver todos los productos'}</a></div>
     </div>
     <a class="t-promo-foto" href="${ruta}" tabindex="-1" aria-hidden="true">${foto}</a>
-  </article>`;
+  </div>`;
     })
     .join('\n');
   const controles =
@@ -781,14 +820,14 @@ function controlesLista(productos) {
 // Una sección como lista; si mezcla unidades, six pack y cajas, por grupos.
 function listaSeccion(productos, pendientes, nivel) {
   const grupos = [...new Set(productos.map((p) => p.grupo))].sort();
-  if (grupos.length < 2) return `<ul class="t-lista">\n${productos.map((p) => tarjeta(p, pendientes, nivel)).join('\n')}\n</ul>`;
+  if (grupos.length < 2) return `<ul class="t-lista">\n${productos.map((p) => tarjeta(p, pendientes, nivel, 'lista')).join('\n')}\n</ul>`;
   return grupos
     .map((g) => {
       const delGrupo = productos.filter((p) => p.grupo === g);
       return `<div class="t-grupo" data-grupo-lista="${g}">
 <h${nivel - 1 < 2 ? 2 : nivel - 1} class="t-subgrupo">${GRUPOS[g]} <span>${delGrupo.length}</span></h${nivel - 1 < 2 ? 2 : nivel - 1}>
 <ul class="t-lista">
-${delGrupo.map((p) => tarjeta(p, pendientes, nivel)).join('\n')}
+${delGrupo.map((p) => tarjeta(p, pendientes, nivel, 'lista')).join('\n')}
 </ul>
 </div>`;
     })
@@ -814,7 +853,7 @@ export function filtrarCarta(carta, buscar) {
 export function paginaCategoria(carta, { base, seccion = null, buscar = '', oferta = false }) {
   const pendientes = { fotos: 4 };
   const secciones = (seccion ? [seccion] : filtrarCarta(carta, buscar))
-    .map((s) => (oferta ? { ...s, productos: s.productos.filter((p) => p.antes) } : s))
+    .map((s) => (oferta ? { ...s, productos: s.productos.filter((p) => p.antes || p.promoSinPrecio) } : s))
     .filter((s) => s.productos.length);
   const productos = secciones.flatMap((s) => s.productos);
   const titulo = seccion ? seccion.nombre : buscar ? `Resultados para «${buscar}»` : oferta ? 'Promociones de hoy' : 'Todos los productos';
@@ -950,11 +989,13 @@ ${cabecera(carta, { actual: seccion.id })}
   ${migasHtml([['Inicio', '/'], [seccion.nombre, rutaCategoria(seccion)], [p.nombre, rutaProducto(p)]])}
   ${avisoViejo(carta)}
   <article class="t-ficha${p.disponible ? '' : ' t-no'}">
-    <figure class="t-ficha-foto">${p.imagen ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" width="800" height="800" fetchpriority="high">` : sinFoto()}${p.antes ? '<span class="t-sello">Oferta</span>' : ''}</figure>
+    <figure class="t-ficha-foto">${p.imagen ? imgFoto(p.imagen, { alt: p.nombre, anchos: [400, 800, 1200], sizes: '(min-width: 900px) 560px, 100vw', tam: 800, prioridad: true }) : sinFoto()}${selloTarjeta(p)}</figure>
     <div class="t-ficha-info">
       <p class="t-ceja"><a href="${rutaCategoria(seccion)}">${esc(seccion.nombre)}</a>${p.grupo || familiares.length ? ` · ${GRUPO_CORTO[p.grupo]}` : ''}</p>
       <h1>${esc(p.nombre)}</h1>
       <p class="t-ficha-precio">${p.desde ? '<small>Desde</small>' : ''}<strong data-precio>${precioTexto(p.precio)}</strong>${p.antes ? `<del>${precioTexto(p.antes)}</del><span class="t-sello">Oferta</span>` : ''}</p>
+      ${p.promoSinPrecio ? `<p class="t-promo-nota">Promoción de hoy: <strong>${esc(p.promoSinPrecio)}</strong></p>` : ''}
+      ${quedanHtml(p)}
       ${p.descripcion ? `<p class="t-ficha-desc">${esc(p.descripcion)}</p>` : ''}
       ${opcionesHermanos}
       ${opcionesVariantes}
@@ -991,6 +1032,89 @@ ${otros.map((x) => tarjeta(x, pendientes)).join('\n')}
 ${pie(carta, 'productos')}`;
 }
 
+// ── Términos de venta y política de datos ──────────────────────────────────
+// Con los datos del responsable que se ponen en el panel (si faltan, el nombre
+// de la tienda). La autorización de datos se pide al hacer el pedido.
+const ACTUALIZADO_LEGAL = '13 de noviembre de 2026';
+
+function contactoLegal(carta) {
+  const t = carta.tienda;
+  const partes = [];
+  if (carta.whatsapp) partes.push(`WhatsApp <a href="https://wa.me/${esc(carta.whatsapp)}">${esc(telefonoTexto(carta.whatsapp.replace(/^57/, '')))}</a>`);
+  else if (carta.telefono) partes.push(`teléfono <a href="tel:+57${esc(carta.telefono)}">${esc(telefonoTexto(carta.telefono))}</a>`);
+  if (t.correo) partes.push(`correo <a href="mailto:${esc(t.correo)}">${esc(t.correo)}</a>`);
+  return partes.join(' o ');
+}
+
+const responsableLegal = (carta) => {
+  const t = carta.tienda;
+  return `${esc(t.responsable || t.nombre)}${t.documento ? `, identificado con ${esc(t.documento)}` : ''}`;
+};
+
+function textoTerminos(carta) {
+  const contacto = contactoLegal(carta);
+  return `<h1>Términos de venta</h1>
+<p class="t-legal-fecha">Actualizados el ${ACTUALIZADO_LEGAL}.</p>
+<p>Estos términos aplican a los pedidos que se hacen en esta página a ${esc(carta.tienda.nombre)}.</p>
+<h2>Quién vende</h2>
+<p>${responsableLegal(carta)}, en ${esc(carta.ciudad)}, Cesar.${contacto ? ` Contacto: ${contacto}.` : ''}</p>
+<h2>Solo para mayores de edad</h2>
+<p>La ley colombiana prohíbe vender bebidas alcohólicas a menores de 18 años. Al hacer un pedido declaras que eres mayor de edad. Al entregar se puede pedir tu documento, y no entregamos a menores de edad.</p>
+<h2>Precios y disponibilidad</h2>
+<p>Los precios están en pesos colombianos y son los que se ven al momento del pedido; pueden cambiar sin aviso. Si un producto se agota después de que pides, te avisamos y ajustamos el pedido contigo.</p>
+<h2>Domicilios</h2>
+<p>Hacemos domicilios solo en ${esc(carta.ciudad)}. El valor del domicilio se muestra antes de confirmar el pedido; los tiempos de entrega son aproximados.${carta.pedidos.minimo ? ` El pedido mínimo es ${precioTexto(carta.pedidos.minimo)}.` : ''}</p>
+<h2>Pagos</h2>
+<p>Pagas con los medios que aparecen al hacer el pedido. Si pagas por transferencia, envía el comprobante para despachar el pedido.</p>
+<h2>Cambios y cancelaciones</h2>
+<p>Puedes cancelar el pedido escribiéndonos antes de que salga. Si algo llega en mal estado o no corresponde a lo que pediste, avísanos al recibir y lo solucionamos. Tus derechos como consumidor (Ley 1480 de 2011) se mantienen.</p>
+<h2>Datos personales</h2>
+<p>Usamos tus datos solo para tu pedido, como dice la <a href="/privacidad">política de tratamiento de datos</a>.</p>`;
+}
+
+function textoPrivacidad(carta) {
+  const contacto = contactoLegal(carta);
+  return `<h1>Política de tratamiento de datos personales</h1>
+<p class="t-legal-fecha">Vigente desde el ${ACTUALIZADO_LEGAL}. Ley 1581 de 2012 y sus decretos.</p>
+<h2>Responsable</h2>
+<p>${responsableLegal(carta)}, en ${esc(carta.ciudad)}, Cesar.${contacto ? ` Para cualquier asunto de tus datos: ${contacto}.` : ''}</p>
+<h2>Qué datos usamos</h2>
+<p>Los que escribes al pedir: nombre, celular, dirección e indicaciones; tu ubicación por GPS solo si la compartes; el medio de pago que escoges y los productos que pides.</p>
+<h2>Para qué</h2>
+<p>Para preparar y entregar tu pedido, comunicarnos contigo sobre él y mostrarte en qué va. No los usamos para publicidad ni los vendemos.</p>
+<h2>Dónde quedan y con quién se comparten</h2>
+<p>Quedan en el sistema de ventas de la tienda y, para que no tengas que escribirlos otra vez, en tu propio teléfono. Los proveedores que operan la tienda (el sistema de ventas y el alojamiento de la página) los tratan solo por cuenta nuestra y para lo mismo.</p>
+<h2>Tus derechos</h2>
+<p>Puedes conocer, actualizar, corregir y pedir que borremos tus datos, revocar tu autorización y pedir prueba de ella. Respondemos las consultas en máximo 10 días hábiles y los reclamos en máximo 15 días hábiles. Si no quedas conforme, puedes acudir a la Superintendencia de Industria y Comercio.</p>
+<h2>Menores de edad</h2>
+<p>La tienda vende solo a mayores de edad y no recoge a propósito datos de menores.</p>
+<h2>Autorización</h2>
+<p>Al marcar la casilla de autorización y hacer el pedido, nos autorizas a tratar tus datos como dice esta política.</p>`;
+}
+
+function paginaLegal(carta, tipo, { base }) {
+  const terminos = tipo === 'terminos';
+  const ruta = terminos ? '/terminos' : '/privacidad';
+  const titulo = terminos ? 'Términos de venta' : 'Política de tratamiento de datos';
+  return `${cabeza(carta, {
+    titulo: `${titulo} | ${carta.marca}`,
+    descripcion: terminos ? `Términos de venta de ${carta.marca}: mayoría de edad, precios, domicilios en ${carta.ciudad}, pagos y cancelaciones.` : `Cómo trata ${carta.marca} los datos personales de sus clientes (Ley 1581 de 2012).`,
+    canonica: `${base}${ruta}`,
+    datos: datosPagina(carta),
+    clase: 't-en-legal',
+  })}
+${cabecera(carta)}
+<main class="t-principal" id="contenido">
+<div class="t-ancho">
+  ${migasHtml([['Inicio', '/'], [titulo, ruta]])}
+  <article class="t-legal">
+  ${terminos ? textoTerminos(carta) : textoPrivacidad(carta)}
+  </article>
+</div>
+</main>
+${pie(carta, '')}`;
+}
+
 function paginaNoEsta(carta, que = 'Este producto') {
   return `${cabeza(carta, { titulo: `No disponible | ${carta.marca}`, descripcion: `${que} ya no está en la carta de ${carta.marca}.`, robots: 'noindex' })}
 ${cabecera(carta)}
@@ -1015,7 +1139,7 @@ function mapaDelSitio(carta, base) {
   const url = (ruta, extra = '') => `  <url><loc>${esc(base + ruta)}</loc><lastmod>${fecha}</lastmod>${extra}</url>`;
   const urls = [url('/')];
   if (carta) {
-    urls.push(url('/productos'));
+    urls.push(url('/productos'), url('/terminos'), url('/privacidad'));
     for (const s of carta.secciones) urls.push(url(rutaCategoria(s)));
     for (const p of carta.secciones.flatMap((s) => s.productos)) {
       urls.push(url(rutaProducto(p), p.imagen ? `<image:image><image:loc>${esc(p.imagen)}</image:loc></image:image>` : ''));
@@ -1092,6 +1216,9 @@ export async function responderTienda(request, { ahora = Date.now() } = {}) {
     const seccion = carta.secciones.find((s) => s.id === id);
     if (!seccion) return new Response(paginaNoEsta(carta, 'Esta categoría'), { status: 404, headers: HTML });
     return new Response(paginaCategoria(carta, { base, seccion }), { headers: HTML });
+  }
+  if (url.pathname === '/terminos' || url.pathname === '/privacidad') {
+    return new Response(paginaLegal(carta, url.pathname.slice(1), { base }), { headers: HTML });
   }
   if (url.pathname === '/productos' || url.pathname === '/productos/') {
     const buscar = String(url.searchParams.get('buscar') || '')

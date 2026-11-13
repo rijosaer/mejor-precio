@@ -158,14 +158,14 @@ svg { width: 22px; height: 22px; flex: none; }
   display: flex; align-items: center; gap: 14px; padding: 18px 16px 14px 20px;
 }
 .t-promo-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.t-promo-ceja { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.85); }
+.t-promo-ceja { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #fff; }
 .t-promo-nombre {
   margin: 0; font-size: 21px; line-height: 1.08; color: #fff;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
 .t-promo-precio { margin: 2px 0 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
 .t-promo-precio strong { font: 800 26px var(--titulos); letter-spacing: -0.02em; }
-.t-promo-precio del { font-size: 13px; color: rgba(255, 255, 255, 0.78); }
+.t-promo-precio del { font-size: 13px; color: rgba(255, 255, 255, 0.92); }
 .t-promo-pct { align-self: center; padding: 2px 8px; border-radius: 8px; background: #fff; color: var(--oscuro); font-size: 12px; font-weight: 800; }
 .t-promo-botones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
 .t-promo .t-boton { background: #fff; color: var(--oscuro); }
@@ -484,6 +484,37 @@ svg { width: 22px; height: 22px; flex: none; }
 .t-resumen .t-resumen-total { padding-top: 10px; border-top: 1px solid var(--borde); color: var(--tinta); align-items: baseline; }
 .t-resumen-total span { font-weight: 700; }
 .t-resumen-total strong { font: 800 22px var(--titulos); }
+/* Pocas existencias y promociones sin precio rebajado. */
+.t-quedan { margin: 0; font-size: 12px; font-weight: 700; color: var(--rojo); }
+.t-promo-nota { margin: 0; padding: 8px 12px; border-radius: 12px; background: var(--suave); color: var(--oscuro); font-size: 13px; }
+
+/* Mayoría de edad: se pregunta al entrar. */
+.t-edad {
+  width: min(420px, calc(100% - 32px)); padding: 28px 24px 20px; border: 0; border-radius: 24px;
+  background: #fff; color: var(--tinta); text-align: center;
+}
+.t-edad[open] { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.t-edad::backdrop { background: var(--oscuro); opacity: 0.94; }
+.t-edad .t-sigla { width: 56px; height: 56px; border-radius: 18px; background: var(--oscuro); color: #fff; font-size: 19px; }
+.t-edad h2 { margin: 4px 0 0; font-size: 24px; }
+.t-edad p { margin: 0; color: var(--gris-2); }
+.t-edad .t-nota a { color: var(--gris); }
+
+/* La autorización de datos al pedir. */
+.t-autoriza { display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; border-radius: 16px; background: #fff; border: 1px solid var(--borde); font-size: 13px; color: var(--gris-2); }
+.t-autoriza input { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--marca); }
+.t-autoriza label { cursor: pointer; }
+.t-autoriza a { color: var(--marca); font-weight: 700; }
+
+/* Términos de venta y política de datos. */
+.t-legal { max-width: 720px; padding: 8px 0 24px; }
+.t-legal h1 { margin: 12px 0 4px; font-size: 30px; }
+.t-legal h2 { margin: 24px 0 6px; font-size: 19px; }
+.t-legal p { margin: 0 0 8px; color: var(--gris-2); line-height: 1.6; }
+.t-legal a { color: var(--marca); font-weight: 600; }
+.t-legal-fecha { font-size: 13px; }
+.t-pie-legal a { margin: 0; }
+
 /* «Te faltan $X para el domicilio gratis» con la barra de avance. */
 .t-gratis { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 16px; background: var(--suave); color: var(--oscuro); }
 .t-gratis strong { font-size: 14px; }

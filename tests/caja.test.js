@@ -58,6 +58,7 @@ const base = {
   lat: 10.4747,
   lng: -73.2436,
   pago: 51,
+  autoriza: true,
   lineas: [
     { id: 598, variante: 229, cantidad: 4 }, // Aguila lata fría x 4 = 11.600
     { id: 520, variante: null, cantidad: 1 }, // Hielo 3 kg = 5.000
@@ -104,6 +105,8 @@ test('el pedido se rechaza con un mensaje claro si algo no cuadra', () => {
   falla({ nombre: ' ' }, /nombre/);
   falla({ direccion: 'x' }, /dirección/);
   falla({ pago: 7 }, /cómo vas a pagar/);
+  falla({ autoriza: false }, /mayor de edad y autoriza el tratamiento de tus datos/);
+  falla({ autoriza: 'si' }, /mayor de edad/, 'tiene que ser la casilla marcada (true), no otro valor');
   falla({ clave: 'x' }, /clave/);
   const agotado = structuredClone(real.data);
   agotado.sections.find((s) => s.id === 113).products.find((p) => p.id === 520).is_available = false;
@@ -239,4 +242,14 @@ test('domicilio gratis: lo que manda TRIVO (aplica, cuánto falta y el nombre de
   assert.equal(domicilioGratis(null), null, 'sin promoción de domicilio gratis');
   assert.deepEqual(domicilioGratis({ applies: false, missing: '63400.00', promotion_name: '  Domicilio gratis ' }), { aplica: false, falta: 63400, nombre: 'Domicilio gratis' });
   assert.deepEqual(domicilioGratis({ applies: true, missing: 0, promotion_name: 'Gratis desde 80 mil' }), { aplica: true, falta: 0, nombre: 'Gratis desde 80 mil' });
+});
+
+test('no deja pedir más de las existencias que quedan', () => {
+  const datos = structuredClone(real.data);
+  const hielo = datos.sections.flatMap((s) => s.products).find((p) => p.id === 520);
+  hielo.stock_left = 2;
+  const c = armarCarta(datos, { t: 1 });
+  const pedido = (cantidad) => armarPedido(c, { ...base, lineas: [{ id: 520, variante: null, cantidad }, { id: 598, variante: 229, cantidad: 4 }] }, [{ id: 51, nombre: 'Nequi' }]);
+  assert.ok(pedido(2).pedido.items.length === 2);
+  assert.throws(() => pedido(3), (e) => e instanceof TypeError && /solo quedan 2/.test(e.message));
 });

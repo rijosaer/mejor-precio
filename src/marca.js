@@ -7,7 +7,9 @@ const CLAVE = 'tienda-marca';
 const MEMORIA = 60_000;
 let enMemoria = null;
 
-export const MARCA_POR_DEFECTO = Object.freeze({ nombre: 'Mejor Precio', sigla: 'MP', color: '#07794C', tiempo: '', lema: '' });
+// responsable, documento y correo: quién responde por los datos personales
+// (política de datos); si están vacíos, la política usa el nombre de la tienda.
+export const MARCA_POR_DEFECTO = Object.freeze({ nombre: 'Mejor Precio', sigla: 'MP', color: '#07794C', tiempo: '', lema: '', responsable: '', documento: '', correo: '' });
 
 const PEQUENAS = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'en']);
 
@@ -32,7 +34,17 @@ export function limpiarMarca(m = {}) {
       .replace(/[^\p{L}\p{N}&]/gu, '')
       .toLocaleUpperCase('es-CO') || (nombre === MARCA_POR_DEFECTO.nombre ? MARCA_POR_DEFECTO.sigla : siglaDe(nombre));
   const color = /^#[0-9a-f]{6}$/i.test(String(m?.color || '')) ? String(m.color).toUpperCase() : MARCA_POR_DEFECTO.color;
-  return { nombre, sigla, color, tiempo: texto(m?.tiempo, 24), lema: texto(m?.lema, 90) };
+  const correo = texto(m?.correo, 80).toLowerCase();
+  return {
+    nombre,
+    sigla,
+    color,
+    tiempo: texto(m?.tiempo, 24),
+    lema: texto(m?.lema, 90),
+    responsable: texto(m?.responsable, 80),
+    documento: texto(m?.documento, 24).replace(/[^\p{L}\p{N} .\-]/gu, ''),
+    correo: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo) ? correo : '',
+  };
 }
 
 export async function leerMarca({ ahora = Date.now() } = {}) {

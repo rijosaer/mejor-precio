@@ -130,7 +130,7 @@ test('las promociones de hoy pasan en un carrusel, de la de mayor descuento a la
   const html = paginaHtml(c, { base: 'https://t.example' });
   const carrusel = html.slice(html.indexOf('data-carrusel'), html.indexOf('</section>', html.indexOf('data-carrusel')));
   const promos = c.secciones.flatMap((s) => s.productos).filter((p) => p.antes && p.disponible);
-  const diapositivas = [...carrusel.matchAll(/<article class="t-promo" id="t-promo-(\d+)" role="group" aria-roledescription="diapositiva" aria-label="(\d+) de (\d+): /g)];
+  const diapositivas = [...carrusel.matchAll(/<div class="t-promo" id="t-promo-(\d+)" role="group" aria-roledescription="diapositiva" aria-label="(\d+) de (\d+): /g)];
   assert.equal(diapositivas.length, Math.min(5, promos.length), 'máximo 5');
   assert.equal(diapositivas[0][3], String(diapositivas.length));
   const descuentos = [...carrusel.matchAll(/<span class="t-promo-pct">−(\d+)%<\/span>/g)].map((m) => Number(m[1]));
@@ -375,4 +375,50 @@ test('domicilio gratis desde: si en TRIVO hay la promoción, la tienda dice desd
     respuestaEnvio = () => new Response(JSON.stringify({ success: true, data: { fee: '8000.00' } }));
     olvidarMemoria();
   }
+});
+
+test('términos de venta y política de datos, con los datos del responsable del panel', async () => {
+  await guardarMarca({ nombre: 'Depósito El Pilón', responsable: 'Distribuidora El Pilón SAS', documento: 'NIT 900.123.456-7', correo: 'datos@pilon.co' });
+  olvidarMemoria();
+  try {
+    let { r, html } = await pagina('/terminos');
+    assert.equal(r.status, 200);
+    assert.match(html, /<h1>Términos de venta<\/h1>/);
+    assert.match(html, /Distribuidora El Pilón SAS, identificado con NIT 900\.123\.456-7/);
+    assert.match(html, /menores de 18 años/);
+    assert.match(html, /class="t-en-legal"/, 'la ventana de edad no tapa los términos');
+    ({ html } = await pagina('/privacidad'));
+    assert.match(html, /Ley 1581 de 2012/);
+    assert.match(html, /<a href="mailto:datos@pilon\.co">datos@pilon\.co<\/a>/);
+    assert.match(html, /10 días hábiles/);
+    ({ html } = await pagina('/'));
+    assert.match(html, /<a href="\/terminos">Términos de venta<\/a> · <a href="\/privacidad">Política de datos<\/a>/, 'enlazados en el pie');
+    const xml = await (await responderTienda(new Request('https://tienda.example/sitemap.xml'))).text();
+    assert.match(xml, /<loc>https:\/\/tienda\.example\/privacidad<\/loc>/);
+  } finally {
+    await guardarMarca({});
+    olvidarMarca();
+  }
+});
+
+test('existencias: «¡Últimas N unidades!», en 0 agotado; promociones sin precio rebajado con su nombre', () => {
+  const datos = copia();
+  const [a, b, c] = datos.sections.find((s) => /hielo/i.test(s.name) && !/cab/i.test(s.name)).products;
+  a.stock_left = 3;
+  b.stock_left = 0;
+  c.active_promo = { name: '2x1 en hielo', type: 'bogo', value: '0' };
+  const carta = conMarca(armarCarta(datos, { t: 1 }));
+  const hielo = carta.secciones.find((s) => s.id === 'hielo').productos;
+  const pa = hielo.find((p) => p.id === a.id);
+  const pb = hielo.find((p) => p.id === b.id);
+  const pc = hielo.find((p) => p.id === c.id);
+  assert.deepEqual([pa.existencias, pa.disponible], [3, true]);
+  assert.deepEqual([pb.existencias, pb.disponible], [null, false], 'sin existencias, agotado');
+  assert.deepEqual([pc.antes, pc.promoSinPrecio], [null, '2x1 en hielo']);
+  const html = paginaCategoria(carta, { base: 'https://t.example', seccion: carta.secciones.find((s) => s.id === 'hielo') });
+  assert.match(html, /<p class="t-quedan">¡Últimas 3 unidades!<\/p>/);
+  assert.match(html, /<span class="t-sello">2x1 en hielo<\/span>/);
+  const datosPagina = JSON.parse(html.match(/<script type="application\/json" id="t-datos">(.*?)<\/script>/)[1]);
+  assert.equal(datosPagina.productos[a.id].q, 3, 'el carrito no deja pedir más de 3');
+  assert.ok(promosDelDia(carta).some(({ p }) => p.id === c.id), 'el 2x1 también sale en el carrusel');
 });

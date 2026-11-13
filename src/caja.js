@@ -105,6 +105,7 @@ export function armarPedido(carta, entrada, pagos = []) {
   if (!lineas.length) throw new TypeError('Tu pedido está vacío');
   if (lineas.length > 40) throw new TypeError('El pedido tiene demasiados productos');
   let subtotal = 0;
+  const pedidas = new Map();
   const items = lineas.map((l) => {
     const id = Number(l?.id);
     const cantidad = Number(l?.cantidad);
@@ -112,6 +113,9 @@ export function armarPedido(carta, entrada, pagos = []) {
     if (!p) throw new TypeError('Uno de los productos ya no está en la carta. Revisa tu pedido.');
     if (!p.disponible) throw new TypeError(`${p.nombre} está agotado por ahora. Quítalo para seguir.`);
     if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 99) throw new TypeError(`Revisa la cantidad de ${p.nombre}`);
+    // Pocas existencias (TRIVO las manda cuando quedan pocas): no más de las que hay.
+    pedidas.set(p.id, (pedidas.get(p.id) || 0) + cantidad);
+    if (p.existencias != null && pedidas.get(p.id) > p.existencias) throw new TypeError(`De ${p.nombre} solo quedan ${p.existencias}. Ajusta la cantidad.`);
     let variante = null;
     if (p.variantes.length) {
       variante = p.variantes.find((v) => v.id === Number(l?.variante));
@@ -136,6 +140,8 @@ export function armarPedido(carta, entrada, pagos = []) {
     pago = pagos.find((m) => m.id === Number(e.pago));
     if (!pago) throw new TypeError('Escoge cómo vas a pagar');
   }
+  // Mayoría de edad y autorización de datos (Ley 1581 de 2012): sin la casilla no sale.
+  if (e.autoriza !== true) throw new TypeError('Para pedir, confirma que eres mayor de edad y autoriza el tratamiento de tus datos.');
 
   const lat = coordenada(e.lat, -5, 15);
   const lng = coordenada(e.lng, -82, -66);

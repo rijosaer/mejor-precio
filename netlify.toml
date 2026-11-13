@@ -34,3 +34,14 @@
   for = "/sw.js"
   [headers.values]
     Cache-Control = "no-cache"
+
+# Las fotos de los productos (en TRIVO) pasan por el CDN de imágenes de Netlify
+# (/.netlify/images): del ancho en que se muestran y en formato moderno.
+[images]
+  remote_images = ['https://trivo-pos\.com/api/media/.*']
+
+# Las fuentes no cambian: el navegador las guarda un año.
+[[headers]]
+  for = "/fuentes/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

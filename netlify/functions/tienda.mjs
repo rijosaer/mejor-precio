@@ -9,4 +9,4 @@ export default async (request) => {
   return responderTienda(request);
 };
 
-export const config = { path: ['/', '/productos', '/productos/', '/producto/*', '/categoria/*', '/marca.css', '/marca.svg', '/robots.txt', '/sitemap.xml'] };
+export const config = { path: ['/', '/productos', '/productos/', '/producto/*', '/categoria/*', '/terminos', '/privacidad', '/marca.css', '/marca.svg', '/robots.txt', '/sitemap.xml'] };

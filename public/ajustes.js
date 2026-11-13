@@ -353,6 +353,9 @@ async function pintarMarca() {
     $('#aj-t-color').value = marca.color.toLowerCase();
     $('#aj-t-tiempo').value = marca.tiempo;
     $('#aj-t-lema').value = marca.lema;
+    $('#aj-t-responsable').value = marca.responsable || '';
+    $('#aj-t-documento').value = marca.documento || '';
+    $('#aj-t-correo').value = marca.correo || '';
   } catch (error) {
     $('#aj-t-listo').textContent = `No se pudo leer la tienda: ${error.message}`;
   }
@@ -371,6 +374,9 @@ async function guardarMarca() {
           color: $('#aj-t-color').value,
           tiempo: $('#aj-t-tiempo').value,
           lema: $('#aj-t-lema').value,
+          responsable: $('#aj-t-responsable').value,
+          documento: $('#aj-t-documento').value,
+          correo: $('#aj-t-correo').value,
         },
       },
     });

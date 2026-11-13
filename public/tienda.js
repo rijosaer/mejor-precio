@@ -330,6 +330,46 @@ function iniciarCarrusel() {
 }
 iniciarCarrusel();
 
+// ── Solo mayores de edad: se pregunta al entrar, una vez cada 30 días ──────
+// (no en los términos ni en la política de datos, que se pueden leer siempre).
+function preguntarEdad() {
+  if (!D || document.body.classList.contains('t-en-legal')) return;
+  const CLAVE_EDAD = 'ap-mayor';
+  const visto = guardado.leer(CLAVE_EDAD, null);
+  if (visto && Date.now() - visto < 30 * 86_400_000) return;
+  const titulo = h('h2', { id: 't-edad-titulo' }, '¿Eres mayor de edad?');
+  const texto = h('p', {}, `${D.marca} vende bebidas alcohólicas: solo para mayores de 18 años.`);
+  const si = h('button', { type: 'button', class: 't-boton t-marca t-grande t-ancho-total' }, 'Sí, soy mayor de edad');
+  const no = h('button', { type: 'button', class: 't-enlace' }, 'No, soy menor de edad');
+  const caja = h(
+    'dialog',
+    { class: 't-edad', 'aria-labelledby': 't-edad-titulo' },
+    h('span', { class: 't-sigla', 'aria-hidden': 'true' }, D.sigla || ''),
+    titulo,
+    texto,
+    si,
+    no,
+    h('p', { class: 't-nota' }, h('a', { href: '/terminos' }, 'Términos de venta'), ' · ', h('a', { href: '/privacidad' }, 'Política de datos')),
+  );
+  caja.addEventListener('cancel', (e) => e.preventDefault()); // con Esc no se salta la pregunta
+  si.addEventListener('click', () => {
+    guardado.poner(CLAVE_EDAD, Date.now());
+    caja.close();
+    caja.remove();
+    document.documentElement.classList.remove('t-sin-scroll');
+  });
+  no.addEventListener('click', () => {
+    titulo.textContent = 'Vuelve cuando seas mayor de edad';
+    texto.textContent = 'La venta de bebidas alcohólicas a menores de edad está prohibida.';
+    si.remove();
+    no.remove();
+  });
+  document.body.append(caja);
+  caja.showModal();
+  document.documentElement.classList.add('t-sin-scroll');
+}
+preguntarEdad();
+
 // ── El pedido ───────────────────────────────────────────────────────────────
 if (D?.productos) iniciarPedido(D);
 
@@ -359,18 +399,30 @@ function iniciarPedido(D) {
     pintarBarra();
   }
 
+  // Cuántas se pueden pedir de un producto: 99, o las existencias si quedan
+  // pocas (las presentaciones del mismo producto comparten existencias).
+  const tope = (id) => Math.min(99, D.productos[id]?.q ?? 99);
+  const enCarrito = (id, menos = null) => carrito.filter((x) => x.id === id && x !== menos).reduce((n, x) => n + x.c, 0);
+
+  // Devuelve cuántas quedaron agregadas (menos de las pedidas si no hay más).
   function agregar(id, v, c = 1) {
+    const cabe = Math.max(0, Math.min(c, tope(id) - enCarrito(id)));
+    if (!cabe) return 0;
     const l = carrito.find((x) => x.id === id && x.v === v);
-    if (l) l.c = Math.min(99, l.c + c);
-    else carrito.push({ id, v, c: Math.min(99, c) });
+    if (l) l.c += cabe;
+    else carrito.push({ id, v, c: cabe });
     guardar();
+    return cabe;
   }
 
   function cambiar(l, c) {
     if (c <= 0) carrito = carrito.filter((x) => x !== l);
-    else l.c = Math.min(99, c);
+    else l.c = Math.min(c, tope(l.id) - enCarrito(l.id, l));
     guardar();
   }
+
+  const mensajeAgregado = (n, pedidas, p, extra = '') =>
+    n ? `Agregaste ${n} × ${p.n}${extra}${n < pedidas ? ` · solo quedan ${p.q}` : ''}` : `Ya tienes en tu pedido todas las que quedan de ${p.n}`;
 
   const ultimo = () => {
     const u = guardado.leer(CLAVE_ULTIMO, null);
@@ -524,9 +576,9 @@ function iniciarPedido(D) {
       ),
     );
     boton.onclick = () => {
-      agregar(id, escogida.id, cuantas);
+      const n = agregar(id, escogida.id, cuantas);
       hoja.close();
-      avisar(`Agregaste ${cuantas} × ${p.n} (${escogida.n})`);
+      avisar(mensajeAgregado(n, cuantas, p, ` (${escogida.n})`));
     };
     pintarBoton();
     armar({
@@ -536,7 +588,7 @@ function iniciarPedido(D) {
         '',
         h('div', { class: 't-entrega-resumen' }, mini(p), h('p', {}, h('strong', {}, p.n), h('span', {}, p.s))),
         opciones,
-        h('div', { class: 't-tarjeta-cab' }, h('h3', {}, 'Cantidad'), contador(cuantas, (d, n) => ((cuantas = Math.max(1, Math.min(99, cuantas + d))), (n.textContent = String(cuantas)), pintarBoton()), 'Cantidad')),
+        h('div', { class: 't-tarjeta-cab' }, h('h3', {}, 'Cantidad'), contador(cuantas, (d, n) => ((cuantas = Math.max(1, Math.min(tope(id), cuantas + d))), (n.textContent = String(cuantas)), pintarBoton()), 'Cantidad')),
       ),
       pie: boton,
     });
@@ -784,11 +836,29 @@ function iniciarPedido(D) {
     }
     fDireccion.querySelector('input').addEventListener('input', cotizar);
 
+    // Mayoría de edad y autorización de datos (Ley 1581): sin la casilla no sale el pedido.
+    const autoriza = h('input', { type: 'checkbox', id: 't-autoriza', checked: Boolean(previo.autoriza) });
+    const casilla = h(
+      'div',
+      { class: 't-autoriza' },
+      autoriza,
+      h(
+        'label',
+        { for: 't-autoriza' },
+        'Soy mayor de edad y autorizo el tratamiento de mis datos para gestionar mi pedido, según la ',
+        h('a', { href: '/privacidad', target: '_blank', rel: 'noopener' }, 'política de datos'),
+        ' y los ',
+        h('a', { href: '/terminos', target: '_blank', rel: 'noopener' }, 'términos de venta'),
+        '.',
+      ),
+    );
+
     const form = h(
       'form',
       { id: 't-form-pedido', class: 't-hoja-col', novalidate: true },
       tarjeta('', h('div', { class: 't-tarjeta-cab' }, h('h3', {}, 'Entrega'), botonCambiar), resumenEntrega, formEntrega),
       tarjeta('', h('h3', {}, '¿Cómo vas a pagar?'), pagos, cuenta),
+      casilla,
       tarjeta(
         't-resumen',
         h('p', {}, filaProductos, valorProductos),
@@ -806,6 +876,7 @@ function iniciarPedido(D) {
       if (!/^(\+?57)?3\d{9}$/.test(datos.celular.replace(/\D/g, '').replace(/^57(?=3\d{9}$)/, ''))) faltan.push(['un celular de 10 dígitos', fCelular]);
       if (datos.direccion.length < 5) faltan.push(['la dirección', fDireccion]);
       if (cajaInfo?.pagos?.length && !pagoId) faltan.push(['cómo vas a pagar', pagos]);
+      if (!autoriza.checked) faltan.push(['confirmar que eres mayor de edad y autorizar tus datos', casilla]);
       error.hidden = !faltan.length;
       if (faltan.length) {
         error.textContent = `Falta ${faltan.map((f) => f[0]).join(', ')}.`;
@@ -813,7 +884,7 @@ function iniciarPedido(D) {
         faltan[0][1].querySelector('input, textarea, button')?.focus();
         return;
       }
-      guardado.poner(CLAVE_CLIENTE, { ...datos, pago: pagoId });
+      guardado.poner(CLAVE_CLIENTE, { ...datos, pago: pagoId, autoriza: true });
       clavePedido ||= nuevaClave();
       enviando = true;
       pintarTotales();
@@ -826,6 +897,7 @@ function iniciarPedido(D) {
           lat: ubic.lat,
           lng: ubic.lng,
           pago: pagoId,
+          autoriza: autoriza.checked,
         });
         // El detalle queda guardado en el teléfono: la confirmación de la tienda no lo muestra.
         const lineas = vigentes().map((l) => {
@@ -1071,8 +1143,8 @@ function iniciarPedido(D) {
       }
       const [id, p] = hallado;
       const v = p.v.length ? (p.v.find((x) => x.id === l.v) || p.v.find((x) => x.n === l.presentacion) || p.v[0]).id : null;
-      agregar(Number(id), v, Math.max(1, Number(l.cantidad) || 1));
-      puestas += 1;
+      if (agregar(Number(id), v, Math.max(1, Number(l.cantidad) || 1))) puestas += 1;
+      else faltan.push(l.nombre);
     }
     if (!puestas) {
       armar({
@@ -1134,14 +1206,13 @@ function iniciarPedido(D) {
     if (enlace.closest('.t-ficha-comprar')) {
       const marcada = document.querySelector('input[name="presentacion"]:checked');
       const v = p.v.length ? Number(marcada?.value) || p.v[0].id : null;
-      agregar(id, v, cantidadFicha);
+      const n = agregar(id, v, cantidadFicha);
       const x = info({ id, v });
-      avisar(`Agregaste ${cantidadFicha} × ${p.n}${x.presentacion ? ` (${x.presentacion})` : ''}`);
+      avisar(mensajeAgregado(n, cantidadFicha, p, x.presentacion ? ` (${x.presentacion})` : ''));
       return;
     }
     if (p.v.length > 1) return abrir(() => vistaEscoger(id));
-    agregar(id, p.v[0]?.id ?? null, 1);
-    avisar(`Agregaste ${p.n}`);
+    avisar(mensajeAgregado(agregar(id, p.v[0]?.id ?? null, 1), 1, p));
   });
 
   // Página del producto: cantidad junto al botón y el precio de la presentación escogida.
@@ -1152,7 +1223,7 @@ function iniciarPedido(D) {
     const pintarFicha = () => {
       boton.textContent = `Agregar · ${plata(precioFicha() * cantidadFicha)}`;
     };
-    ficha.prepend(contador(cantidadFicha, (d, n) => ((cantidadFicha = Math.max(1, Math.min(99, cantidadFicha + d))), (n.textContent = String(cantidadFicha)), pintarFicha()), 'Cantidad'));
+    ficha.prepend(contador(cantidadFicha, (d, n) => ((cantidadFicha = Math.max(1, Math.min(tope(Number(ficha.dataset.producto)), cantidadFicha + d))), (n.textContent = String(cantidadFicha)), pintarFicha()), 'Cantidad'));
     for (const r of document.querySelectorAll('input[name="presentacion"]')) {
       r.addEventListener('change', () => {
         if (precio) precio.textContent = plata(Number(r.dataset.precio));
