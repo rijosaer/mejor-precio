@@ -484,6 +484,18 @@ svg { width: 22px; height: 22px; flex: none; }
 .t-resumen .t-resumen-total { padding-top: 10px; border-top: 1px solid var(--borde); color: var(--tinta); align-items: baseline; }
 .t-resumen-total span { font-weight: 700; }
 .t-resumen-total strong { font: 800 22px var(--titulos); }
+/* «Te faltan $X para el domicilio gratis» con la barra de avance. */
+.t-gratis { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 16px; background: var(--suave); color: var(--oscuro); }
+.t-gratis strong { font-size: 14px; }
+.t-gratis small { font-size: 12px; }
+.t-gratis progress { width: 100%; height: 8px; border: 0; border-radius: 4px; overflow: hidden; background: #fff; -webkit-appearance: none; appearance: none; }
+.t-gratis progress::-webkit-progress-bar { background: #fff; border-radius: 4px; }
+.t-gratis progress::-webkit-progress-value { background: var(--marca); border-radius: 4px; }
+.t-gratis progress::-moz-progress-bar { background: var(--marca); border-radius: 4px; }
+.t-gratis-listo { background: var(--marca); color: #fff; }
+.t-gratis-listo progress::-webkit-progress-value { background: #fff; }
+.t-gratis-listo progress::-moz-progress-bar { background: #fff; }
+.t-exito { margin: 0; padding: 10px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; background: var(--suave); color: var(--oscuro); }
 .t-alerta, .t-error { margin: 0; padding: 10px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; }
 .t-alerta { background: #fff4d6; color: #6b4a00; }
 .t-error { background: #fdecea; color: var(--rojo); }

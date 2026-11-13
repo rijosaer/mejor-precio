@@ -21,7 +21,7 @@ globalThis.fetch = async (url) => {
   return /trivo-pos\.com\/api\/public\/menu\/agua-pure/.test(u) ? respuestaTrivo() : new Response('no', { status: 404 });
 };
 
-const { armarCarta, estadoTienda, familia, filtrarCarta, nombreVisible, paginaHtml, paginaCategoria, presentacion, responderTienda, olvidarMemoria, rutaProducto } = await import(
+const { armarCarta, estadoTienda, familia, filtrarCarta, nombreVisible, paginaHtml, paginaCategoria, presentacion, promosDelDia, responderTienda, olvidarMemoria, rutaProducto } = await import(
   '../src/tienda.js'
 );
 const { colores, contraste, guardarMarca, limpiarMarca, olvidarMarca, siglaDe, MARCA_POR_DEFECTO } = await import('../src/marca.js');
@@ -131,7 +131,7 @@ test('las promociones de hoy pasan en un carrusel, de la de mayor descuento a la
   const carrusel = html.slice(html.indexOf('data-carrusel'), html.indexOf('</section>', html.indexOf('data-carrusel')));
   const promos = c.secciones.flatMap((s) => s.productos).filter((p) => p.antes && p.disponible);
   const diapositivas = [...carrusel.matchAll(/<article class="t-promo" id="t-promo-(\d+)" role="group" aria-roledescription="diapositiva" aria-label="(\d+) de (\d+): /g)];
-  assert.equal(diapositivas.length, Math.min(10, promos.length));
+  assert.equal(diapositivas.length, Math.min(5, promos.length), 'máximo 5');
   assert.equal(diapositivas[0][3], String(diapositivas.length));
   const descuentos = [...carrusel.matchAll(/<span class="t-promo-pct">−(\d+)%<\/span>/g)].map((m) => Number(m[1]));
   assert.deepEqual(descuentos, [...descuentos].sort((a, b) => b - a), 'primero la de mayor descuento');
@@ -142,6 +142,17 @@ test('las promociones de hoy pasan en un carrusel, de la de mayor descuento a la
   const css = await readFile(new URL('../public/tienda.css', import.meta.url), 'utf8');
   assert.ok(!/\.t-promo[^{]*\{[^}]*mix-blend-mode/.test(css), 'la foto de la promoción no se mezcla con el fondo');
   assert.ok(!/\.t-promos? \{[^}]*--amarillo/.test(css), 'el carrusel no es amarillo');
+});
+
+test('el carrusel alterna categorías: no salen seguidas dos de la misma si hay de otra', () => {
+  const datos = copia();
+  const hielo = datos.sections.find((s) => /hielo/i.test(s.name) && !/cab/i.test(s.name));
+  hielo.products[0].active_promo = { name: 'Hielo en promo', promo_price: '3500.00' };
+  const c = conMarca(armarCarta(datos, { t: 1 }));
+  const promos = promosDelDia(c);
+  assert.equal(promos.length, 5);
+  assert.notEqual(promos[0].s.id, promos[1].s.id, 'la mejor de cada categoría primero');
+  assert.match(promos[0].p.nombre, /Hielo/, 'el hielo tiene el mayor descuento');
 });
 
 test('si TRIVO falla sale la última carta buena; si nunca cargó, 503 sin nombrar a TRIVO', async () => {
@@ -348,4 +359,20 @@ test('todos los productos y el buscador sin JavaScript (/productos?buscar=…)',
     true,
     'sin tildes también encuentra',
   );
+});
+
+test('domicilio gratis desde: si en TRIVO hay la promoción, la tienda dice desde cuánto', async () => {
+  respuestaEnvio = () => new Response(JSON.stringify({ success: true, data: { fee: '8000.00', fee_original: '8000.00', free_delivery: { applies: false, missing: '80000.00', promotion_name: 'Domicilio gratis' } } }));
+  olvidarMemoria();
+  try {
+    const { html } = await pagina('/');
+    assert.match(html, /<dt>Domicilio gratis desde<\/dt><dd>\$80\.000<\/dd>/);
+    const datosPagina = JSON.parse(html.match(/<script type="application\/json" id="t-datos">(.*?)<\/script>/)[1]);
+    assert.deepEqual([datosPagina.gratisDesde, datosPagina.nombreGratis], [80000, 'Domicilio gratis']);
+    const { html: ficha } = await pagina('/producto/hielo-en-cubo-3-kg-520');
+    assert.match(ficha, /Domicilio \$8\.000, gratis desde \$80\.000/);
+  } finally {
+    respuestaEnvio = () => new Response(JSON.stringify({ success: true, data: { fee: '8000.00' } }));
+    olvidarMemoria();
+  }
 });

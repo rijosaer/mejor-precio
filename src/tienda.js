@@ -236,9 +236,11 @@ export async function cargarCarta({ ahora = Date.now() } = {}) {
 }
 
 // El domicilio de la sucursal (sin dirección): lo que se muestra antes de
-// pedir. Media hora en memoria; si TRIVO tarda, la página sale sin el valor.
+// pedir, y desde cuánto es gratis si en TRIVO hay una promoción de domicilio
+// gratis (con el subtotal en 0, lo que falta es el mínimo). Media hora en
+// memoria; si TRIVO tarda, la página sale sin esos datos.
 export async function domicilioBase({ ahora = Date.now(), sucursal = 'B001', ciudad = 'Valledupar' } = {}) {
-  if (envioEnMemoria && ahora - envioEnMemoria.t < 30 * 60_000) return envioEnMemoria.valor;
+  if (envioEnMemoria && ahora - envioEnMemoria.t < 30 * 60_000) return envioEnMemoria.envio;
   try {
     const res = await fetch(`${BASE}/api/public/menu/${SLUG}/delivery-quote/`, {
       method: 'POST',
@@ -249,8 +251,15 @@ export async function domicilioBase({ ahora = Date.now(), sucursal = 'B001', ciu
     const datos = await res.json();
     const valor = Number(datos?.data?.fee);
     if (!res.ok || !Number.isFinite(valor) || valor < 0) return null;
-    envioEnMemoria = { t: ahora, valor };
-    return valor;
+    const gratis = datos?.data?.free_delivery;
+    const desde = gratis && gratis.applies !== true ? Math.round(Number(gratis.missing)) || null : null;
+    const envio = {
+      valor,
+      gratisDesde: desde > 0 ? desde : null,
+      nombreGratis: desde > 0 ? String(gratis.promotion_name || '').replace(/\s+/g, ' ').trim().slice(0, 40) : '',
+    };
+    envioEnMemoria = { t: ahora, envio };
+    return envio;
   } catch {
     return null;
   }
@@ -411,6 +420,8 @@ function datosPagina(carta) {
     abierto: carta.vieja ? null : carta.abierto,
     semana: carta.semana,
     envio: carta.envio,
+    gratisDesde: carta.gratisDesde || null,
+    nombreGratis: carta.nombreGratis || '',
     productos,
   };
   return `<script type="application/json" id="t-datos">${JSON.stringify(datos).replace(/</g, '\\u003c')}</script>`;
@@ -608,6 +619,7 @@ function hechos(carta) {
   const filas = [];
   if (carta.tienda.tiempo) filas.push(['Llega en', esc(carta.tienda.tiempo)]);
   filas.push(['Domicilio', carta.envio == null ? 'Según la dirección' : carta.envio ? precioTexto(carta.envio) : 'Gratis']);
+  if (carta.gratisDesde && carta.envio) filas.push(['Domicilio gratis desde', precioTexto(carta.gratisDesde)]);
   if (carta.pedidos.minimo) filas.push(['Pedido mínimo', precioTexto(carta.pedidos.minimo)]);
   return `<dl class="t-hechos">${filas.map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl>`;
 }
@@ -616,12 +628,24 @@ const avisoViejo = (carta) => (carta.vieja ? '<p class="t-aviso">Estos precios s
 
 const todos = (carta) => carta.secciones.flatMap((s) => s.productos.map((p) => ({ p, s })));
 
-// Las promociones de hoy: las que TRIVO tiene activas ahora (de la de mayor
-// descuento a la de menor). Si no hay, lo destacado con foto.
+// Las promociones de hoy: las que TRIVO tiene activas ahora, máximo 5. Se
+// alternan las categorías (la mejor de cada una, luego la segunda…) para que
+// no salgan seguidas cinco cajas iguales; dentro de cada categoría, de mayor a
+// menor descuento. Si no hay promociones, lo destacado con foto.
+export const MAX_PROMOS = 5;
 export function promosDelDia(carta) {
   const lista = todos(carta).filter(({ p }) => p.disponible);
-  const promos = lista.filter(({ p }) => p.antes).sort((a, b) => b.p.antes / b.p.precio - a.p.antes / a.p.precio);
-  if (promos.length) return promos.slice(0, 10).map((x) => ({ ...x, promo: true }));
+  const descuento = ({ p }) => p.antes / p.precio;
+  const porSeccion = new Map();
+  for (const x of lista.filter(({ p }) => p.antes).sort((a, b) => descuento(b) - descuento(a))) {
+    if (!porSeccion.has(x.s.id)) porSeccion.set(x.s.id, []);
+    porSeccion.get(x.s.id).push(x);
+  }
+  const promos = [];
+  for (let ronda = 0; promos.length < MAX_PROMOS && [...porSeccion.values()].some((l) => l.length > ronda); ronda++) {
+    for (const l of porSeccion.values()) if (l[ronda] && promos.length < MAX_PROMOS) promos.push(l[ronda]);
+  }
+  if (promos.length) return promos.map((x) => ({ ...x, promo: true }));
   return lista
     .filter(({ p }) => p.destacado && p.imagen)
     .slice(0, 4)
@@ -937,7 +961,7 @@ ${cabecera(carta, { actual: seccion.id })}
       ${comprar}
       <section class="t-entrega-info" aria-label="Entrega">
         ${ICONOS.camion}
-        <p><strong>${carta.tienda.tiempo ? `Llega en ${esc(carta.tienda.tiempo)}` : `Domicilio en ${esc(carta.ciudad)}`}</strong><span>${carta.envio ? `Domicilio ${precioTexto(carta.envio)}` : 'El domicilio se calcula con tu dirección'}${carta.pedidos.minimo ? ` · pedido mínimo ${precioTexto(carta.pedidos.minimo)}` : ''}.</span></p>
+        <p><strong>${carta.tienda.tiempo ? `Llega en ${esc(carta.tienda.tiempo)}` : `Domicilio en ${esc(carta.ciudad)}`}</strong><span>${carta.envio ? `Domicilio ${precioTexto(carta.envio)}${carta.gratisDesde ? `, gratis desde ${precioTexto(carta.gratisDesde)}` : ''}` : 'El domicilio se calcula con tu dirección'}${carta.pedidos.minimo ? ` · pedido mínimo ${precioTexto(carta.pedidos.minimo)}` : ''}.</span></p>
       </section>
       ${duda ? `<p class="t-duda">¿Tienes dudas? <a href="${esc(duda)}" target="_blank" rel="noopener">Pregúntanos por WhatsApp</a></p>` : ''}
     </div>
@@ -1043,7 +1067,16 @@ export async function responderTienda(request, { ahora = Date.now() } = {}) {
   }
   // La tienda lleva el nombre del distribuidor, no el de la carta de TRIVO.
   const envio = await domicilioBase({ sucursal: leida.sucursal || 'B001', ciudad: leida.ciudad });
-  const carta = { ...leida, marca: marca.nombre, lema: marca.lema, tienda: marca, envio, ahora };
+  const carta = {
+    ...leida,
+    marca: marca.nombre,
+    lema: marca.lema,
+    tienda: marca,
+    envio: envio?.valor ?? null,
+    gratisDesde: envio?.gratisDesde ?? null,
+    nombreGratis: envio?.nombreGratis || '',
+    ahora,
+  };
 
   if (url.pathname.startsWith('/producto/')) {
     const id = url.pathname.match(/-(\d+)\/?$/)?.[1];

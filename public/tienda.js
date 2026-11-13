@@ -582,7 +582,7 @@ function iniciarPedido(D) {
 
   // «Tu pedido»: productos, entrega, pago y total en una sola hoja; «Hacer
   // pedido» lo manda a la tienda.
-  function vistaPedido() {
+  function vistaPedido({ aviso = null } = {}) {
     const lineasHoy = vigentes();
     const caidas = carrito.length - lineasHoy.length;
     if (caidas) {
@@ -593,13 +593,30 @@ function iniciarPedido(D) {
 
     const previo = guardado.leer(CLAVE_CLIENTE, {});
     const ubic = { lat: null, lng: null };
-    // El domicilio de la sucursal mientras se calcula el de la dirección.
-    let domicilio = D.envio != null ? { valor: D.envio, base: true } : null;
+    // El domicilio de la sucursal mientras se calcula el de la dirección. Si
+    // en la tienda hay domicilio gratis desde cierto valor, «meta» es ese valor.
+    const base = () => (D.envio != null ? { valor: D.envio, base: true, gratis: D.gratisDesde ? { meta: D.gratisDesde, nombre: D.nombreGratis } : null } : null);
+    let domicilio = base();
     let enviando = false;
 
     // Productos.
     const lista = h('ul', { class: 't-lineas' });
     const avisoMinimo = h('p', { class: 't-alerta', hidden: true });
+    // «Te faltan $X para el domicilio gratis», con la barra de avance.
+    const barraGratis = h('div', { class: 't-gratis', 'aria-live': 'polite', hidden: true });
+    const pintarGratis = () => {
+      const g = domicilio?.gratis;
+      barraGratis.hidden = !g;
+      if (!g) return;
+      const sub = subtotal();
+      const falta = Math.max(0, g.meta - sub);
+      barraGratis.classList.toggle('t-gratis-listo', !falta);
+      barraGratis.replaceChildren(
+        h('strong', {}, falta ? `Te faltan ${plata(falta)} para el domicilio gratis` : `¡Tu domicilio es gratis!${g.nombre && !/domicilio gratis/i.test(g.nombre) ? ` · ${g.nombre}` : ''}`),
+        h('progress', { max: g.meta, value: Math.min(sub, g.meta), 'aria-label': 'Avance hacia el domicilio gratis' }),
+        falta ? h('small', {}, `Domicilio gratis en pedidos desde ${plata(g.meta)}.`) : '',
+      );
+    };
     const pintarLineas = () => {
       const ls = vigentes();
       if (!ls.length) return vistaPedido();
@@ -737,21 +754,30 @@ function iniciarPedido(D) {
       filaTotal.textContent = plata(total);
       boton.textContent = enviando ? 'Enviando…' : `Hacer pedido · ${plata(total)}`;
       boton.disabled = enviando || cerrada || sub < (D.minimo || 0);
+      pintarGratis();
     }
 
+    // El domicilio lo calcula la tienda con el subtotal (y la dirección si ya
+    // la escribieron): así se sabe si aplica el domicilio gratis y cuánto falta.
     let temporizador;
     let turno = 0;
     function cotizar() {
       clearTimeout(temporizador);
       const direccion = valor(fDireccion);
-      if (direccion.length < 5 && ubic.lat === null) return;
       temporizador = setTimeout(async () => {
         const mio = ++turno;
+        const sub = subtotal();
         try {
-          const r = await api('domicilio', { direccion, lat: ubic.lat, lng: ubic.lng, subtotal: subtotal() });
-          if (mio === turno) domicilio = r;
+          const r = await api('domicilio', { direccion: direccion.length < 5 ? '' : direccion, lat: ubic.lat, lng: ubic.lng, subtotal: sub });
+          if (mio === turno) {
+            const g = r.gratis;
+            domicilio = {
+              ...r,
+              gratis: g ? { meta: g.aplica ? Math.min(sub, D.gratisDesde || sub) : sub + g.falta, nombre: g.nombre || D.nombreGratis } : null,
+            };
+          }
         } catch {
-          if (mio === turno) domicilio = D.envio != null ? { valor: D.envio, base: true } : null;
+          if (mio === turno) domicilio = base();
         }
         pintarTotales();
       }, 600);
@@ -804,7 +830,8 @@ function iniciarPedido(D) {
         // El detalle queda guardado en el teléfono: la confirmación de la tienda no lo muestra.
         const lineas = vigentes().map((l) => {
           const x = info(l);
-          return { cantidad: l.c, nombre: x.nombre, presentacion: x.presentacion, total: x.precio * l.c };
+          // id y presentación (v) para «Pedir otra vez».
+          return { id: l.id, v: l.v, cantidad: l.c, nombre: x.nombre, presentacion: x.presentacion, total: x.precio * l.c };
         });
         const sub = subtotal();
         const u = {
@@ -848,7 +875,18 @@ function iniciarPedido(D) {
       texto: 'Tu pedido',
       sub: ' ',
       dos: true,
-      contenido: [h('div', { class: 't-hoja-col' }, productos, avisoMinimo, D.enLinea ? '' : h('p', { class: 't-alerta' }, 'Los pedidos en línea están apagados en este momento. Puedes enviarlo por WhatsApp.')), form],
+      contenido: [
+        h(
+          'div',
+          { class: 't-hoja-col' },
+          aviso ? h('p', { class: aviso.tipo === 'alerta' ? 't-alerta' : 't-exito', role: 'status' }, aviso.texto) : '',
+          productos,
+          barraGratis,
+          avisoMinimo,
+          D.enLinea ? '' : h('p', { class: 't-alerta' }, 'Los pedidos en línea están apagados en este momento. Puedes enviarlo por WhatsApp.'),
+        ),
+        form,
+      ],
       pie: [avisoCerrado, error, respaldo, D.enLinea ? boton : botonWhatsapp(), h('button', { type: 'button', class: 't-enlace', onclick: () => hoja.close() }, 'Seguir comprando')],
     });
     pintarLineas();
@@ -953,6 +991,8 @@ function iniciarPedido(D) {
     };
     pintar(u.ultimoEstado || { etapa: 0, etiqueta: 'Recibido', cancelado: false });
 
+    // «Pedir otra vez» sale cuando el pedido ya terminó (entregado o cancelado).
+    const otraVez = botonOtraVez(u, !u.final);
     let reloj = null;
     const revisar = async () => {
       if (!u.uuid) return;
@@ -967,6 +1007,7 @@ function iniciarPedido(D) {
         if (s.final) {
           clearInterval(reloj);
           u.final = true;
+          if (otraVez) otraVez.hidden = false;
           pintarBarra();
         }
         guardado.poner(CLAVE_ULTIMO, u);
@@ -1006,14 +1047,61 @@ function iniciarPedido(D) {
       ],
       pie: [
         u.transferencia && enlaceWa && !u.final ? h('a', { class: 't-boton t-marca t-grande t-ancho-total', href: enlaceWa, target: '_blank', rel: 'noopener' }, 'Enviar comprobante por WhatsApp') : '',
+        otraVez,
         h('button', { type: 'button', class: 't-enlace', onclick: () => hoja.close() }, 'Seguir comprando'),
       ],
     });
   }
 
+  // «Pedir otra vez»: lo del último pedido vuelve al carrito con los precios de
+  // hoy (lo que ya no está o se agotó, se avisa y se deja por fuera).
+  const DIAS_REPETIR = 60;
+  const botonOtraVez = (u, oculto = false) =>
+    u.detalle?.lineas?.length ? h('button', { type: 'button', class: 't-boton t-marca t-grande t-ancho-total', hidden: oculto, onclick: () => repetir(u) }, 'Pedir otra vez') : '';
+
+  function repetir(u) {
+    const porNombre = (n) => Object.entries(D.productos).find(([, p]) => p.n === n);
+    let puestas = 0;
+    const faltan = [];
+    for (const l of u.detalle?.lineas || []) {
+      const hallado = l.id != null && D.productos[l.id] ? [l.id, D.productos[l.id]] : porNombre(l.nombre);
+      if (!hallado || !hallado[1].ok) {
+        faltan.push(l.nombre);
+        continue;
+      }
+      const [id, p] = hallado;
+      const v = p.v.length ? (p.v.find((x) => x.id === l.v) || p.v.find((x) => x.n === l.presentacion) || p.v[0]).id : null;
+      agregar(Number(id), v, Math.max(1, Number(l.cantidad) || 1));
+      puestas += 1;
+    }
+    if (!puestas) {
+      armar({
+        texto: 'Pedir otra vez',
+        contenido: h('div', { class: 't-vacio-pedido' }, icono(ICONO.pedidos), h('strong', {}, 'Lo de tu último pedido no está hoy'), h('p', {}, 'Se agotó o salió de la carta. Mira lo que hay hoy.')),
+        pie: h('a', { class: 't-boton t-grande t-ancho-total', href: '/productos' }, 'Ver productos'),
+      });
+      return;
+    }
+    const texto = faltan.length
+      ? `Pusimos de nuevo tu último pedido, menos ${faltan.join(', ')}, que no está hoy. Los precios son los de hoy.`
+      : 'Pusimos de nuevo tu último pedido. Los precios son los de hoy: revisa y haz el pedido.';
+    abrir(() => vistaPedido({ aviso: { texto, tipo: faltan.length ? 'alerta' : 'exito' } }));
+  }
+
   function vistaMisPedidos() {
     const u = ultimo();
     if (u) return vistaListo(u);
+    // Un pedido de días atrás: su detalle y «Pedir otra vez».
+    const viejo = guardado.leer(CLAVE_ULTIMO, null);
+    if (viejo?.detalle?.lineas?.length && Date.now() - viejo.t < DIAS_REPETIR * 86_400_000) {
+      armar({
+        texto: 'Mis pedidos',
+        sub: `Tu último pedido: ${new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'long' }).format(viejo.t)}`,
+        contenido: detalleHtml(viejo, viejo.cuentaTienda),
+        pie: [botonOtraVez(viejo), h('button', { type: 'button', class: 't-enlace', onclick: () => hoja.close() }, 'Seguir comprando')],
+      });
+      return;
+    }
     armar({
       texto: 'Mis pedidos',
       contenido: h(

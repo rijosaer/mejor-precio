@@ -154,6 +154,17 @@ export function armarPedido(carta, entrada, pagos = []) {
   return { pedido, subtotal };
 }
 
+// La promoción de domicilio gratis de TRIVO (con pedido mínimo), como la lee su
+// carta: `free_delivery: { applies, missing, promotion_name }`. Sin promoción, null.
+export function domicilioGratis(fd) {
+  if (!fd || typeof fd !== 'object') return null;
+  return {
+    aplica: fd.applies === true,
+    falta: Math.max(0, Math.round(Number(fd.missing) || 0)),
+    nombre: texto(fd.promotion_name, 40),
+  };
+}
+
 // «Domicilio #12 · Pedido del día #34», como lo muestra la carta.
 export function referencia(r) {
   if (r?.delivery_number != null) return `Domicilio #${r.delivery_number}${r.daily_number != null ? ` · Pedido del día #${r.daily_number}` : ''}`;
@@ -253,7 +264,7 @@ export async function manejarCaja(request, { ip = '' } = {}) {
         },
       });
       if (!r.ok) return json(502, { error: 'No pudimos calcular el domicilio' });
-      return json(200, { valor: Number(r.datos?.fee) || 0, antes: Number(r.datos?.fee_original) || 0, zona: r.datos?.zone_name || '' });
+      return json(200, { valor: Number(r.datos?.fee) || 0, antes: Number(r.datos?.fee_original) || 0, zona: r.datos?.zone_name || '', gratis: domicilioGratis(r.datos?.free_delivery) });
     }
 
     if (ruta === '/ubicacion' && metodo === 'POST') {

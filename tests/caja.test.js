@@ -44,7 +44,7 @@ globalThis.fetch = async (url, opciones = {}) => {
   return new Response('{"detail":"no"}', { status: 404 });
 };
 
-const { armarPedido, celularLocal, enCiudad, manejarCaja, referencia, reiniciarCaja } = await import('../src/caja.js');
+const { armarPedido, celularLocal, domicilioGratis, enCiudad, manejarCaja, referencia, reiniciarCaja } = await import('../src/caja.js');
 const { armarCarta, olvidarMemoria } = await import('../src/tienda.js');
 
 const carta = () => armarCarta(structuredClone(real.data), { t: 1 });
@@ -132,7 +132,7 @@ test('de punta a punta: caja, domicilio, ubicación, pedido a TRIVO y estado', a
   assert.deepEqual([caja.abierto, caja.enLinea, caja.minimo], [true, true, 10000]);
 
   r = await pedir('domicilio', { direccion: 'Calle 16 # 9-20', lat: 10.47, lng: -73.24, subtotal: 16600 });
-  assert.deepEqual(await r.json(), { valor: 8000, antes: 8000, zona: '' });
+  assert.deepEqual(await r.json(), { valor: 8000, antes: 8000, zona: '', gratis: null });
   const cotiza = llamadas.find((l) => l.ruta.endsWith('/delivery-quote/'));
   assert.deepEqual(cotiza.cuerpo, { branch_code: 'B001', address: 'Calle 16 # 9-20', city: 'Valledupar', lat: 10.47, lng: -73.24, subtotal: 16600 });
 
@@ -233,4 +233,10 @@ test('un pedido con GPS fuera de la ciudad no llega a TRIVO', async () => {
   geoCaido = false;
   r = await pedir('pedido', base);
   assert.equal(r.status, 200, 'con GPS en Valledupar el pedido sale');
+});
+
+test('domicilio gratis: lo que manda TRIVO (aplica, cuánto falta y el nombre de la promoción)', () => {
+  assert.equal(domicilioGratis(null), null, 'sin promoción de domicilio gratis');
+  assert.deepEqual(domicilioGratis({ applies: false, missing: '63400.00', promotion_name: '  Domicilio gratis ' }), { aplica: false, falta: 63400, nombre: 'Domicilio gratis' });
+  assert.deepEqual(domicilioGratis({ applies: true, missing: 0, promotion_name: 'Gratis desde 80 mil' }), { aplica: true, falta: 0, nombre: 'Gratis desde 80 mil' });
 });

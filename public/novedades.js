@@ -21,7 +21,7 @@ export const VERSIONES = [
       {
         titulo: 'Inicio nuevo',
         antes: 'Una sola página larga con todos los productos.',
-        ahora: 'Arriba si la tienda está abierta (y hasta qué hora), a dónde se entrega y el buscador; luego el domicilio y el pedido mínimo, un carrusel con las promociones de hoy (pasa solo, se desliza y tiene pausa; con el color de la tienda y la foto con sus colores), las categorías, recomendados y una fila por categoría. «Ver todas las promociones» muestra solo lo que está en promoción.',
+        ahora: 'Arriba si la tienda está abierta (y hasta qué hora), a dónde se entrega y el buscador; luego el domicilio y el pedido mínimo, un carrusel con hasta 5 promociones de hoy, alternando categorías (pasa solo, se desliza y tiene pausa; con el color de la tienda y la foto con sus colores), las categorías, recomendados y una fila por categoría. «Ver todas las promociones» muestra solo lo que está en promoción.',
       },
       {
         titulo: 'Categorías y buscador',
@@ -36,7 +36,7 @@ export const VERSIONES = [
       {
         titulo: 'Tu pedido y seguimiento',
         antes: 'El pedido iba en dos pasos y el seguimiento era una lista corta.',
-        ahora: 'Productos, entrega, pago y total en una sola hoja (con los datos de la vez pasada y «Cambiar»). «Mis pedidos» muestra el estado paso a paso con la hora, el detalle y un botón para escribirle a la tienda. Sin mapa: la tienda no comparte dónde va el domiciliario.',
+        ahora: 'Productos, entrega, pago y total en una sola hoja (con los datos de la vez pasada y «Cambiar»). «Mis pedidos» muestra el estado paso a paso con la hora, el detalle y un botón para escribirle a la tienda; cuando el pedido termina (y hasta 60 días después) sale «Pedir otra vez», que vuelve a poner lo mismo en el carrito con los precios de hoy. Si en TRIVO hay una promoción de domicilio gratis, el inicio dice desde cuánto y el pedido muestra «Te faltan $X para el domicilio gratis» con una barra. Sin mapa: la tienda no comparte dónde va el domiciliario.',
       },
     ],
   },
