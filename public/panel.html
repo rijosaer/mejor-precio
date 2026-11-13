@@ -353,6 +353,33 @@
     </fieldset>
 
     <fieldset class="aj-seccion">
+      <legend>Tienda en línea</legend>
+      <p class="ayuda">Así se ve la tienda pública: el nombre, las iniciales y el color de quien vende. No sale el nombre de nadie más. Los cambios se ven en la tienda en unos minutos.</p>
+      <div class="rejilla">
+        <label>Nombre de la tienda
+          <input id="aj-t-nombre" type="text" maxlength="40" autocomplete="off">
+        </label>
+        <label>Iniciales
+          <input id="aj-t-sigla" type="text" maxlength="3" autocomplete="off">
+        </label>
+        <label>Color
+          <input id="aj-t-color" type="color">
+        </label>
+        <label>Tiempo de entrega
+          <input id="aj-t-tiempo" type="text" maxlength="24" placeholder="30–45 min" autocomplete="off">
+        </label>
+      </div>
+      <label>Frase corta (opcional)
+        <input id="aj-t-lema" type="text" maxlength="90" autocomplete="off">
+      </label>
+      <div class="aj-botones">
+        <button id="aj-t-guardar" class="boton-texto" type="button">Guardar la tienda</button>
+        <a class="boton-texto" href="/" target="_blank" rel="noopener">Ver la tienda</a>
+      </div>
+      <p id="aj-t-listo" class="ayuda" role="status"></p>
+    </fieldset>
+
+    <fieldset class="aj-seccion">
       <legend>Envío por tienda</legend>
       <p class="ayuda">Cómo te llega el producto de cada tienda. Se usa al ordenar por «precio + envío o traslado» y en Mi pedido. «Lo recojo» usa la distancia de Logística.</p>
       <div id="aj-envios" class="aj-envios"></div>

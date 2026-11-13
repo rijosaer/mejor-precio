@@ -1,19 +1,23 @@
-// La página principal: la tienda pública de Agua Pure, sin clave. Muestra la
-// carta de TRIVO como catálogo con fotos; cada producto tiene «Agregar» y el
-// pedido se arma aquí mismo (public/tienda.js) y se manda a TRIVO
-// (src/caja.js), donde entra igual que uno hecho en la carta. Cada producto tiene además su propia página
-// (/producto/…) para que Google lo muestre solo. Todo se arma en el servidor
-// para que Google lea los productos, los precios y los datos del negocio.
-// El panel administrativo (la app con clave) quedó en /panel.
+// La tienda pública (versión 2): la tienda del distribuidor como si fuera
+// suya, con su nombre, sus iniciales y su color (src/marca.js). Los productos y
+// los precios salen de su carta en TRIVO; el pedido se arma aquí mismo
+// (public/tienda.js) y se manda a TRIVO (src/caja.js), donde entra igual que
+// uno hecho en la carta. No se nombra a TRIVO ni a nadie más.
+//
+// Páginas: inicio («/»), todos los productos («/productos», con buscador),
+// una por categoría («/categoria/…») y una por producto («/producto/…»). Todo
+// se arma en el servidor para que Google lea los productos, los precios y los
+// datos del negocio. El panel administrativo (la app con clave) está en /panel.
 import { escribir, leer } from './almacen.js';
 import { pedir } from './http.js';
+import { colores, leerMarca, marcaCss, marcaSvg } from './marca.js';
 import { BASE, SLUG } from './tiendas/aguapure.js';
 
-const CARTA = `${BASE}/m/${SLUG}`;
 // La última carta buena: si TRIVO no responde, la página sale con esa.
 const CLAVE = 'tienda-carta';
 const MEMORIA = 60_000;
 let enMemoria = null;
+let envioEnMemoria = null;
 
 const pesos = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
@@ -39,6 +43,7 @@ export const nombreVariante = (nombre) => {
 // 0 = por unidad, 1 = six pack, 2 = caja: el orden en que se muestran. Solo es
 // caja lo que dice «caja» (el agua «paquete x 24» sigue con los paquetes).
 export const GRUPOS = ['Por unidad', 'Six pack', 'Cajas'];
+const GRUPO_CORTO = ['Unidad', 'Six pack', 'Caja'];
 export function presentacion(nombre) {
   const n = String(nombre || '').toLowerCase();
   if (/\bcaja\b/.test(n)) return 2;
@@ -56,6 +61,20 @@ const claveOrden = (nombre) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+// La «familia» junta la lata, el six pack y la caja de la misma cerveza:
+// «Aguila Original fría x 330ml (lata)», «Six pack Aguila Original x 6…» y
+// «Caja Aguila Original x 24…» → «aguila original».
+export function familia(nombre) {
+  return String(nombre || '')
+    .toLowerCase()
+    .replace(/\bfr[ií]a\b/g, ' ')
+    .split(/\s+x\s+|\s+x(?=\d)/)[0]
+    .replace(/^(combo\s+)?(caja|six\s*-?\s*pack)\s+(de\s+)?/, '')
+    .replace(/^cerveza\s+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 const slug = (texto) =>
   texto
     .normalize('NFD')
@@ -63,6 +82,12 @@ const slug = (texto) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '') || 'productos';
+
+const sinTildes = (texto) =>
+  String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 
 const absoluta = (ruta) => {
   if (!ruta) return null;
@@ -90,6 +115,15 @@ function horarioUnico(horas) {
   if (dias.length !== 7 || !dias.every((d) => Array.isArray(d) && d.length === 2)) return null;
   const [abre, cierra] = dias[0];
   return dias.every(([a, c]) => a === abre && c === cierra) ? { abre, cierra } : null;
+}
+
+// El horario de cada día («0» = lunes en TRIVO), solo con horas válidas.
+function horarioSemana(horas) {
+  const semana = {};
+  for (const [dia, par] of Object.entries(horas || {})) {
+    if (/^[0-6]$/.test(dia) && Array.isArray(par) && par.length === 2 && par.every((x) => /^\d{2}:\d{2}$/.test(String(x)))) semana[dia] = par.map(String);
+  }
+  return Object.keys(semana).length ? semana : null;
 }
 
 // De la respuesta de TRIVO a lo que pinta la página: secciones en el orden de
@@ -152,18 +186,16 @@ export function armarCarta(datos, { t = Date.now() } = {}) {
 
   return {
     t,
-    marca: datos.brand?.name || 'Agua Pure',
+    marca: datos.brand?.name || 'Tienda',
     lema: tema.branding?.tagline || '',
-    logo: absoluta(tema.branding?.logoUrl || datos.brand?.logo_url),
-    portada: absoluta(tema.branding?.coverUrl || datos.menu?.cover_url),
     ciudad: datos.branch?.city || 'Valledupar',
     telefono: soloDigitos(datos.branch?.phone) || null,
     direccion: datos.branch?.address || null,
     horario: horarioUnico(datos.branch?.opening_hours),
+    semana: horarioSemana(datos.branch?.opening_hours),
     whatsapp: numeroWhatsapp(datos),
     sucursal: datos.branch?.code || null,
     abierto: datos.branch?.is_open !== false,
-    instagram: absoluta(tema.social?.instagram),
     pedidos: {
       enLinea: pedidos.enabled !== false,
       minimo: Number(pedidos.minOrder) || null,
@@ -192,11 +224,68 @@ export async function cargarCarta({ ahora = Date.now() } = {}) {
   }
 }
 
+// El domicilio de la sucursal (sin dirección): lo que se muestra antes de
+// pedir. Media hora en memoria; si TRIVO tarda, la página sale sin el valor.
+export async function domicilioBase({ ahora = Date.now(), sucursal = 'B001', ciudad = 'Valledupar' } = {}) {
+  if (envioEnMemoria && ahora - envioEnMemoria.t < 30 * 60_000) return envioEnMemoria.valor;
+  try {
+    const res = await fetch(`${BASE}/api/public/menu/${SLUG}/delivery-quote/`, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify({ branch_code: sucursal, city: ciudad, address: '', subtotal: 0 }),
+      signal: AbortSignal.timeout(2500),
+    });
+    const datos = await res.json();
+    const valor = Number(datos?.data?.fee);
+    if (!res.ok || !Number.isFinite(valor) || valor < 0) return null;
+    envioEnMemoria = { t: ahora, valor };
+    return valor;
+  } catch {
+    return null;
+  }
+}
+
+// ── ¿Abierto? ──────────────────────────────────────────────────────────────
+// TRIVO dice si está abierto ahora; con el horario de cada día se dice hasta
+// qué hora o cuándo abre. El navegador lo vuelve a calcular (public/tienda.js).
+const horaTexto = (hhmm) => {
+  const [h24, m] = String(hhmm).split(':').map(Number);
+  if (h24 === 0 && !m) return 'medianoche';
+  if (h24 === 12 && !m) return 'mediodía';
+  return `las ${((h24 + 11) % 12) + 1}:${String(m || 0).padStart(2, '0')} ${h24 < 12 ? 'a. m.' : 'p. m.'}`;
+};
+const minutos = (hhmm) => {
+  const [h, m] = String(hhmm).split(':').map(Number);
+  return h * 60 + (m || 0);
+};
+
+export function ahoraEnBogota(t = Date.now()) {
+  const partes = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bogota', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(t)
+      .map((p) => [p.type, p.value]),
+  );
+  return { dia: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(partes.weekday), min: Number(partes.hour) * 60 + Number(partes.minute) };
+}
+
+export function estadoTienda(abierto, semana, t = Date.now()) {
+  const { dia, min } = ahoraEnBogota(t);
+  const hoy = semana?.[dia];
+  if (abierto) {
+    if (hoy && minutos(hoy[1]) !== minutos(hoy[0])) return { abierto: true, texto: `Abierto hasta ${horaTexto(hoy[1])}` };
+    return { abierto: true, texto: 'Abierto ahora' };
+  }
+  if (hoy && min < minutos(hoy[0])) return { abierto: false, texto: `Cerrado · abre hoy a ${horaTexto(hoy[0])}` };
+  const manana = semana?.[(dia + 1) % 7];
+  if (manana) return { abierto: false, texto: `Cerrado · abre mañana a ${horaTexto(manana[0])}` };
+  return { abierto: false, texto: 'Cerrado ahora' };
+}
+
 // ── HTML ────────────────────────────────────────────────────────────────────
 const esc = (x) =>
   String(x ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-const precioTexto = (n) => pesos.format(n).replace(/\s/g, ' ');
+const precioTexto = (n) => pesos.format(n).replace(/\s/g, '');
 
 const telefonoTexto = (n) => (n?.length === 10 ? `${n.slice(0, 3)} ${n.slice(3, 6)} ${n.slice(6)}` : n);
 
@@ -210,6 +299,7 @@ export function enlaceWhatsapp(numero, texto) {
 // «/producto/caja-aguila-original-x-24-unidades-lata-al-por-mayor-523». El
 // número es el id de TRIVO; si el nombre cambia, la dirección vieja redirige.
 export const rutaProducto = (p) => `/producto/${slug(p.nombre)}-${p.id}`;
+export const rutaCategoria = (s) => `/categoria/${s.id}`;
 
 function buscarProducto(carta, id) {
   for (const seccion of carta.secciones) {
@@ -219,103 +309,103 @@ function buscarProducto(carta, id) {
   return null;
 }
 
-// La identidad es la de la carta de Agua Pure en TRIVO: encabezado azul con la
-// tarjeta de domicilios, hoja blanca, Manrope en los títulos e Inter en el texto,
-// fichas de categoría con foto y productos sobre fondo gris claro.
+const svg = (d, extra = '') => `<svg viewBox="0 0 24 24" aria-hidden="true"${extra}><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ICONOS = {
-  chat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-4.5 3.5V17.5H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="8.5" cy="11.5" r="1.1" fill="currentColor"/><circle cx="12" cy="11.5" r="1.1" fill="currentColor"/><circle cx="15.5" cy="11.5" r="1.1" fill="currentColor"/></svg>',
-  bolsa: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8Zm3 0V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
-  pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12Z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="9" r="2.3" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
-  flecha: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  inicio: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20h-5.5v-5h-5v5H4v-9.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
-  catalogo: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
-  instagram: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16.8" cy="7.3" r="1" fill="currentColor"/></svg>',
+  bolsa: svg('M6 8h12l-1 12H7L6 8Zm3 0V6a3 3 0 0 1 6 0v2'),
+  pin: svg('M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12Zm0-9.7a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z'),
+  lupa: svg('M11 17.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13ZM16 16l4 4'),
+  chat: svg('M4.5 19.5 5.6 16A8 8 0 1 1 8.4 18.6l-3.9.9ZM9.5 9.5c.4 2.2 2.2 4.1 4.6 4.6'),
+  inicio: svg('M4 10.5 12 4l8 6.5V20h-5.5v-5h-5v5H4v-9.5Z'),
+  productos: svg('M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z'),
+  pedidos: svg('M7 3.5h10a1 1 0 0 1 1 1V20l-2.5-1.5L13 20l-2.5-1.5L8 20l-2-1.2V4.5a1 1 0 0 1 1-1ZM9 8h6M9 12h6'),
+  mas: svg('M12 5v14M5 12h14'),
+  flecha: svg('M5 12h14M13 6l6 6-6 6'),
+  atras: svg('M19 12H5M11 6l-6 6 6 6'),
+  camion: svg('M3 7h11v9H3V7Zm11 3h4l3 3v3h-7v-6ZM7 18.5a1.5 1.5 0 1 0 0-.1M17 18.5a1.5 1.5 0 1 0 0-.1'),
   destello: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c.6 4.6 4.4 8.4 9 9-4.6.6-8.4 4.4-9 9-.6-4.6-4.4-8.4-9-9 4.6-.6 8.4-4.4 9-9Z" fill="currentColor"/></svg>',
 };
 
+// Ícono de cada categoría según su nombre.
+const ICONOS_CATEGORIA = [
+  [/cab[aá]|nevera|combo/, 'M4 9h16v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9Zm2-3h12l2 3H4l2-3Zm4 7h4'],
+  [/cerve/, 'M8 4h8l-1 3v12a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 19V7L8 4Zm1 7h6'],
+  [/agua/, 'M12 3.5s6 6.4 6 10.5a6 6 0 0 1-12 0c0-4.1 6-10.5 6-10.5Z'],
+  [/hielo/, 'M5 8.5 12 5l7 3.5v7L12 19l-7-3.5v-7Zm0 0L12 12l7-3.5M12 12v7'],
+  [/licor|aguardiente|\bron\b|whisk|vino|tequila|vodka/, 'M10 3h4v4l2 3v9.5a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10l2-3V3Zm-2 10h8'],
+  [/gaseosa|refresco|jugo|energ/, 'M9 3h6M10 3v3.5L8 9v10.5a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V9l-2-2.5V3M8 13h8'],
+  [/pasaboca|picar|snack|papa|mecato/, 'M6 6h12l-1.5 14h-9L6 6Zm2-2.5h8M9 10l1 2M14 11l-1 2'],
+];
+const iconoCategoria = (nombre) => svg((ICONOS_CATEGORIA.find(([re]) => re.test(sinTildes(nombre))) || [null, 'M6 8h12l-1 12H7L6 8Zm3 0V6a3 3 0 0 1 6 0v2'])[1]);
+
 const sinFoto = () => `<span class="t-sinfoto">${ICONOS.destello}</span>`;
 
-const precioHtml = (p) =>
-  `${p.desde ? '<small class="t-desde">Desde</small>' : ''}<strong>${precioTexto(p.precio)}</strong><span>/ presentación</span>${p.antes ? `<del>${precioTexto(p.antes)}</del>` : ''}`;
-
-// «Agregar» mete el producto al pedido de esta página (public/tienda.js), que
-// se manda a TRIVO al final. Sin JavaScript el mismo botón abre la carta de TRIVO.
-function botonesCompra(p, grande = false) {
-  if (!p.disponible) return '<span class="t-agotado">Agotado por ahora</span>';
-  const g = grande ? ' t-grande' : '';
-  const texto = grande ? 'Agregar al pedido' : p.variantes.length > 1 ? 'Escoger' : 'Agregar';
-  return `<a class="t-comprar${g}" href="${CARTA}" target="_blank" rel="noopener" data-agregar="${esc(p.id)}" aria-label="Agregar ${esc(p.nombre)} al pedido">${ICONOS.bolsa}<span>${texto}</span></a>`;
-}
-
-const listaVariantes = (p) => (p.variantes.length > 1 ? `<p class="t-variantes">${p.variantes.map((v) => esc(v.nombre)).join(' · ')}</p>` : '');
-
-// En la página del producto: las presentaciones con su precio, para escoger.
-function escogerVariante(p) {
-  if (p.variantes.length < 2) return '';
-  return `<fieldset class="t-presentaciones">
-  <legend>Presentación</legend>
-  ${p.variantes
-    .map(
-      (v, i) =>
-        `<label><input type="radio" name="presentacion" value="${esc(v.id)}" data-precio="${esc(v.precio)}"${i === 0 ? ' checked' : ''}><span>${esc(v.nombre)}</span><b>${precioTexto(v.precio)}</b></label>`,
-    )
-    .join('\n  ')}
-</fieldset>`;
-}
-
-// Las primeras fotos (las que se ven al abrir) cargan ya; las demás, al bajar.
-function tarjeta(p, seccion, carta, pendientes, nivel = 3) {
-  const ruta = rutaProducto(p);
-  const foto = p.imagen
-    ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" width="400" height="400" ${pendientes.fotos-- > 0 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`
+const foto = (p, pendientes, tam = 400) =>
+  p.imagen
+    ? `<img src="${esc(p.imagen)}" alt="" width="${tam}" height="${tam}" ${pendientes.fotos-- > 0 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`
     : sinFoto();
-  const cinta = p.antes ? '<span class="t-cinta">Promo</span>' : p.destacado ? '<span class="t-cinta">Destacado</span>' : '';
-  return `<li class="t-producto${p.disponible ? '' : ' t-no'}" id="producto-${esc(p.id)}" data-buscar="${esc(`${p.nombre} ${seccion.nombre}`)}">
-  <a class="t-arte" href="${esc(ruta)}" tabindex="-1" aria-hidden="true"><span class="t-etiqueta">${esc(seccion.nombre)}</span>${cinta}${foto}</a>
-  <p class="t-precio">${precioHtml(p)}</p>
-  <h${nivel}><a href="${esc(ruta)}">${esc(p.nombre)}</a></h${nivel}>
-  ${listaVariantes(p)}
-  ${p.descripcion ? `<p class="t-desc">${esc(p.descripcion)}</p>` : ''}
-  <div class="t-botones">${botonesCompra(p)}</div>
+
+const detalleTarjeta = (p) => (p.variantes.length > 1 ? p.variantes.map((v) => v.nombre).join(' · ') : '');
+
+// «+» mete el producto al pedido de esta página (public/tienda.js), que se
+// manda a la tienda al final. Sin JavaScript lleva a la página del producto.
+const botonMas = (p) =>
+  p.disponible
+    ? `<a class="t-mas" href="${esc(rutaProducto(p))}" data-agregar="${esc(p.id)}" aria-label="Agregar ${esc(p.nombre)}">${ICONOS.mas}</a>`
+    : '<span class="t-agotado">Agotado</span>';
+
+const precioTarjeta = (p) =>
+  `<p class="t-prod-precio">${p.desde ? '<small>Desde</small>' : ''}<strong>${precioTexto(p.precio)}</strong>${p.antes ? `<del>${precioTexto(p.antes)}</del>` : ''}</p>`;
+
+// Una tarjeta de producto: en rejilla (inicio) o en lista (categorías).
+function tarjeta(p, pendientes, nivel = 3) {
+  const ruta = rutaProducto(p);
+  const detalle = detalleTarjeta(p);
+  return `<li class="t-prod${p.disponible ? '' : ' t-no'}" data-grupo="${p.grupo}" data-precio="${p.precio}"${p.antes ? ' data-oferta' : ''}>
+  <a class="t-prod-foto" href="${esc(ruta)}" tabindex="-1" aria-hidden="true">${foto(p, pendientes)}${p.antes ? '<span class="t-sello">Oferta</span>' : ''}</a>
+  <div class="t-prod-texto">
+    <h${nivel} class="t-prod-nombre"><a href="${esc(ruta)}">${esc(p.nombre)}</a></h${nivel}>
+    ${detalle ? `<p class="t-prod-detalle">${esc(detalle)}</p>` : ''}
+    <div class="t-prod-pie">${precioTarjeta(p)}${botonMas(p)}</div>
+  </div>
 </li>`;
 }
 
-// Una sección: si mezcla unidades, six pack y cajas, cada grupo con su subtítulo.
-function rejilla(seccion, carta, pendientes) {
-  const grupos = [...new Set(seccion.productos.map((p) => p.grupo))];
-  if (grupos.length < 2) return `<ul class="t-rejilla">\n${seccion.productos.map((p) => tarjeta(p, seccion, carta, pendientes)).join('\n')}\n</ul>`;
-  return grupos
-    .map((g) => {
-      const productos = seccion.productos.filter((p) => p.grupo === g);
-      return `<h3 class="t-subgrupo">${GRUPOS[g]} <span>${productos.length}</span></h3>
-<ul class="t-rejilla">
-${productos.map((p) => tarjeta(p, seccion, carta, pendientes, 4)).join('\n')}
-</ul>`;
-    })
-    .join('\n');
-}
-
-// Lo que el carrito necesita de cada producto (nombre, precio, foto,
-// presentaciones). Es un bloque de datos: no se ejecuta.
-function datosCarrito(carta) {
+// Lo que el carrito y el buscador necesitan de cada producto. Es un bloque de
+// datos: no se ejecuta.
+function datosPagina(carta) {
   const productos = {};
   for (const s of carta.secciones) {
     for (const p of s.productos) {
       productos[p.id] = {
         n: p.nombre,
         p: p.precio,
+        a: p.antes,
         f: p.imagen,
         u: rutaProducto(p),
         ok: p.disponible,
+        s: s.nombre,
+        g: p.grupo,
         v: p.variantes.map((v) => ({ id: v.id, n: v.nombre, p: v.precio })),
       };
     }
   }
-  const datos = { marca: carta.marca, ciudad: carta.ciudad, whatsapp: carta.whatsapp, minimo: carta.pedidos.minimo || 0, enLinea: carta.pedidos.enLinea, productos };
+  const datos = {
+    marca: carta.marca,
+    sigla: carta.tienda.sigla,
+    tiempo: carta.tienda.tiempo,
+    ciudad: carta.ciudad,
+    whatsapp: carta.whatsapp,
+    minimo: carta.pedidos.minimo || 0,
+    enLinea: carta.pedidos.enLinea,
+    abierto: carta.vieja ? null : carta.abierto,
+    semana: carta.semana,
+    envio: carta.envio,
+    productos,
+  };
   return `<script type="application/json" id="t-datos">${JSON.stringify(datos).replace(/</g, '\\u003c')}</script>`;
 }
 
-// Título y descripción para Google: lo que de verdad se vende, en Valledupar.
+// Título y descripción para Google: lo que de verdad se vende, en la ciudad.
 function textosSeo(carta) {
   const nombres = carta.secciones.map((s) => s.nombre.toLowerCase());
   const hay = (re) => nombres.some((n) => re.test(n));
@@ -338,27 +428,24 @@ function negocioLd(carta, base) {
     name: carta.marca,
     description: carta.lema || undefined,
     url: `${base}/`,
-    image: carta.portada || carta.logo || undefined,
-    logo: carta.logo || undefined,
     telephone: carta.telefono ? `+57${carta.telefono}` : undefined,
     address: { '@type': 'PostalAddress', streetAddress: carta.direccion || undefined, addressLocality: carta.ciudad, addressRegion: 'Cesar', addressCountry: 'CO' },
     areaServed: { '@type': 'City', name: carta.ciudad },
     currenciesAccepted: 'COP',
     paymentAccepted: carta.pedidos.pagos.join(', ') || undefined,
-    sameAs: carta.instagram ? [carta.instagram] : undefined,
     openingHoursSpecification: carta.horario
       ? [{ '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], opens: carta.horario.abre, closes: carta.horario.cierra }]
       : undefined,
   };
 }
 
-// En la principal, la lista apunta a la página de cada producto (ahí van sus datos completos).
-function catalogoLd(carta, base) {
+// La lista apunta a la página de cada producto (ahí van sus datos completos).
+function catalogoLd(carta, base, secciones = carta.secciones) {
   return {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
     name: `Productos de ${carta.marca} en ${carta.ciudad}`,
-    itemListElement: carta.secciones
+    itemListElement: secciones
       .flatMap((s) => s.productos)
       .map((p, i) => ({ '@type': 'ListItem', position: i + 1, url: `${base}${rutaProducto(p)}`, name: p.nombre })),
   };
@@ -389,17 +476,19 @@ function productoLd(p, seccion, carta, base) {
         areaServed: { '@type': 'City', name: carta.ciudad },
       },
     },
-    {
-      '@context': 'https://schema.org',
-      '@type': 'BreadcrumbList',
-      itemListElement: [
-        { '@type': 'ListItem', position: 1, name: 'Inicio', item: `${base}/` },
-        { '@type': 'ListItem', position: 2, name: seccion.nombre, item: `${base}/#${seccion.id}` },
-        { '@type': 'ListItem', position: 3, name: p.nombre, item: url },
-      ],
-    },
+    migasLd(base, [
+      ['Inicio', `${base}/`],
+      [seccion.nombre, `${base}${rutaCategoria(seccion)}`],
+      [p.nombre, url],
+    ]),
   ];
 }
+
+const migasLd = (base, pasos) => ({
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: pasos.map(([name, item], i) => ({ '@type': 'ListItem', position: i + 1, name, item })),
+});
 
 const descripcionProducto = (p, carta) =>
   `${p.nombre} a ${precioTexto(p.precio)} con domicilio en ${carta.ciudad}. ` +
@@ -410,8 +499,11 @@ const descripcionProducto = (p, carta) =>
 const fechaTexto = (t) =>
   new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' }).format(t);
 
-// Lo que comparten la principal y la página de cada producto.
-function cabeza(carta, { titulo, descripcion, canonica, imagen, tipo = 'website', datos = '', robots = 'index, follow, max-image-preview:large' }) {
+const versionMarca = (carta) => `${carta.tienda.color.slice(1)}${carta.tienda.sigla}`.toLowerCase();
+
+// Lo que comparten todas las páginas.
+function cabeza(carta, { titulo, descripcion, canonica, imagen, tipo = 'website', datos = '', robots = 'index, follow, max-image-preview:large', clase = '' }) {
+  const v = encodeURIComponent(versionMarca(carta));
   return `<!doctype html>
 <html lang="es-CO">
 <head>
@@ -421,7 +513,7 @@ function cabeza(carta, { titulo, descripcion, canonica, imagen, tipo = 'website'
 <meta name="description" content="${esc(descripcion)}">
 ${canonica ? `<link rel="canonical" href="${esc(canonica)}">` : ''}
 <meta name="robots" content="${robots}">
-<meta name="theme-color" content="#0369a1">
+<meta name="theme-color" content="${colores(carta.tienda.color).oscuro}">
 <meta name="color-scheme" content="light">
 <meta name="geo.region" content="CO-CES">
 <meta name="geo.placename" content="${esc(carta.ciudad)}">
@@ -432,194 +524,431 @@ ${canonica ? `<link rel="canonical" href="${esc(canonica)}">` : ''}
 <meta property="og:description" content="${esc(descripcion)}">
 ${canonica ? `<meta property="og:url" content="${esc(canonica)}">` : ''}
 ${imagen ? `<meta property="og:image" content="${esc(imagen)}">\n<meta name="twitter:card" content="summary_large_image">` : ''}
-${carta.logo ? `<link rel="icon" href="${esc(carta.logo)}">\n<link rel="apple-touch-icon" href="${esc(carta.logo)}">` : '<link rel="icon" href="/icons/icon-192.png" type="image/png">'}
-<link rel="preload" href="/fuentes/manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="icon" href="/marca.svg?v=${v}" type="image/svg+xml">
+<link rel="preload" href="/fuentes/bricolage-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fuentes/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/tienda.css">
+<link rel="stylesheet" href="/marca.css?v=${v}">
 ${datos}
 <script src="/tienda.js" type="module"></script>
 </head>
-<body>`;
+<body${clase ? ` class="${clase}"` : ''}>`;
 }
 
 const whatsappGeneral = (carta) => enlaceWhatsapp(carta.whatsapp, `Hola ${carta.marca}, quiero hacer un pedido a domicilio en ${carta.ciudad}.`);
 
-// Encabezado azul: marca, «¿Te ayudamos?» y la tarjeta de domicilios.
-function cabecera(carta) {
+// Encabezado con el color de la tienda: iniciales, nombre, si está abierta,
+// a dónde se entrega, el buscador y «Tu pedido». Debajo, las categorías.
+function cabecera(carta, { actual = '', buscar = '' } = {}) {
+  const t = carta.tienda;
   const wa = whatsappGeneral(carta);
-  const cobertura = enlaceWhatsapp(carta.whatsapp, `Hola ${carta.marca}, quiero consultar la cobertura de domicilios en ${carta.ciudad}.`);
+  const estado = estadoTienda(carta.vieja ? false : carta.abierto, carta.semana, carta.ahora);
   return `<a class="t-saltar" href="#contenido">Ir al contenido</a>
-<header class="t-cabecera" id="inicio">
-  <div class="t-ancho t-cabecera-fila">
-    <a class="t-marca" href="/" aria-label="${esc(carta.marca)}, inicio">
-      ${carta.logo ? `<img src="${esc(carta.logo)}" alt="" width="56" height="56">` : ''}
-      <span>${esc(carta.marca)}<small>Ice &amp; bebidas</small></span>
+<header class="t-cab">
+  <div class="t-ancho t-cab-fila">
+    <a class="t-tienda" href="/" aria-label="${esc(t.nombre)}, inicio">
+      <span class="t-sigla" aria-hidden="true">${esc(t.sigla)}</span>
+      <span class="t-tienda-texto"><strong>${esc(t.nombre)}</strong><small class="t-estado${estado.abierto ? '' : ' t-cerrada'}" data-estado>${esc(estado.texto)}</small></span>
     </a>
-    ${wa ? `<a class="t-ayuda" href="${esc(wa)}" target="_blank" rel="noopener">${ICONOS.chat}<span>¿Te ayudamos?</span></a>` : ''}
-  </div>
-  <div class="t-ancho">
-    <div class="t-entrega">
-      ${ICONOS.pin}
-      <div><span>Domicilios en</span><strong>${esc(carta.ciudad)}, Cesar</strong></div>
-      ${cobertura ? `<a href="${esc(cobertura)}" target="_blank" rel="noopener">Consultar ${ICONOS.flecha}</a>` : ''}
+    <p class="t-entregar">${ICONOS.pin}<span><small data-entregar-titulo>Domicilios en</small><b data-entregar>${esc(carta.ciudad)}</b></span></p>
+    <form class="t-buscar" role="search" action="/productos" method="get">
+      <label class="t-oculto" for="t-q">Buscar productos</label>
+      ${ICONOS.lupa}
+      <input id="t-q" name="buscar" type="search" placeholder="Busca cerveza, hielo, agua…" autocomplete="off" enterkeyhint="search" maxlength="60" value="${esc(buscar)}">
+    </form>
+    <div class="t-cab-acciones">
+      <button type="button" class="t-cab-wa t-cab-mis" data-mis-pedidos hidden>${ICONOS.pedidos}<span>Mis pedidos</span></button>
+      ${wa ? `<a class="t-cab-wa" href="${esc(wa)}" target="_blank" rel="noopener">${ICONOS.chat}<span>Escríbenos</span></a>` : ''}
+      <button type="button" class="t-cab-pedido" data-abrir-pedido hidden>${ICONOS.bolsa}<span class="t-cab-pedido-texto" data-pedido-texto>Tu pedido</span><span class="t-cab-n" data-pedido-n hidden></span></button>
     </div>
   </div>
+  <nav class="t-cats-barra" aria-label="Categorías">
+    <div class="t-ancho"><a href="/productos"${actual === 'productos' ? ' aria-current="page"' : ''}>Todo</a>${carta.secciones
+      .map((s) => `<a href="${rutaCategoria(s)}"${actual === s.id ? ' aria-current="page"' : ''}>${esc(s.nombre)}</a>`)
+      .join('')}</div>
+  </nav>
 </header>`;
 }
 
-function pie(carta) {
+function pie(carta, actual) {
+  const t = carta.tienda;
   const wa = whatsappGeneral(carta);
   return `<footer class="t-pie">
-    <p class="t-pie-marca">${esc(carta.marca)}</p>
-    ${carta.lema ? `<p class="t-pie-lema">${esc(carta.lema)}</p>` : ''}
-    <p>Domicilios en ${esc(carta.ciudad)}, Cesar${carta.direccion ? ` · ${esc(carta.direccion)}` : ''}${carta.telefono ? ` · <a href="tel:+57${esc(carta.telefono)}">${esc(telefonoTexto(carta.telefono))}</a>` : ''}</p>
+  <div class="t-ancho">
+    <p class="t-pie-marca"><span class="t-sigla" aria-hidden="true">${esc(t.sigla)}</span><strong>${esc(t.nombre)}</strong></p>
+    ${t.lema ? `<p>${esc(t.lema)}</p>` : ''}
+    <p>Domicilios en ${esc(carta.ciudad)}, Cesar${carta.direccion ? ` · ${esc(carta.direccion)}` : ''}${carta.telefono ? ` · <a href="tel:+57${esc(carta.telefono)}">${esc(telefonoTexto(carta.telefono))}</a>` : ''}${wa ? ` · <a href="${esc(wa)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</p>
     ${carta.pedidos.nota ? `<p>${esc(carta.pedidos.nota)}</p>` : ''}
-    <p><a href="${CARTA}" target="_blank" rel="noopener">Nuestra carta en TRIVO</a>${carta.instagram ? ` · <a href="${esc(carta.instagram)}" target="_blank" rel="noopener">Instagram</a>` : ''}</p>
     <p class="t-pie-nota">Precios en pesos colombianos (actualizados el ${esc(fechaTexto(carta.t))}). La venta de bebidas alcohólicas es solo para mayores de edad. El exceso de alcohol es perjudicial para la salud.</p>
-  </footer>
-</div>
-</main>
-<nav class="t-barra-inferior" aria-label="Accesos">
-  <a href="/#inicio" class="t-activo">${ICONOS.inicio}<span>Inicio</span></a>
-  <a href="/#categorias">${ICONOS.catalogo}<span>Catálogo</span></a>
-  ${carta.instagram ? `<a href="${esc(carta.instagram)}" target="_blank" rel="noopener">${ICONOS.instagram}<span>Instagram</span></a>` : ''}
-  ${wa ? `<a href="${esc(wa)}" target="_blank" rel="noopener" class="t-activo t-fuerte">${ICONOS.chat}<span>Pedir por WhatsApp</span></a>` : ''}
+  </div>
+</footer>
+<nav class="t-nav" aria-label="Navegación">
+  <a href="/"${actual === 'inicio' ? ' aria-current="page"' : ''}>${ICONOS.inicio}<span>Inicio</span></a>
+  <a href="/productos"${actual === 'productos' ? ' aria-current="page"' : ''}>${ICONOS.productos}<span>Productos</span></a>
+  <button type="button" data-mis-pedidos hidden>${ICONOS.pedidos}<span>Mis pedidos</span></button>
+  ${wa ? `<a href="${esc(wa)}" target="_blank" rel="noopener">${ICONOS.chat}<span>Escríbenos</span></a>` : ''}
 </nav>
 </body>
 </html>`;
 }
 
-function chipsPedido(carta) {
-  return [
-    carta.pedidos.minimo ? `<li>Pedido mínimo <b>${precioTexto(carta.pedidos.minimo)}</b></li>` : '',
-    carta.pedidos.pagos.length ? `<li>Pagas con <b>${esc(carta.pedidos.pagos.join(' o '))}</b></li>` : '',
-  ].join('');
+// Llega en · Domicilio · Pedido mínimo.
+function hechos(carta) {
+  const filas = [];
+  if (carta.tienda.tiempo) filas.push(['Llega en', esc(carta.tienda.tiempo)]);
+  filas.push(['Domicilio', carta.envio == null ? 'Según la dirección' : carta.envio ? precioTexto(carta.envio) : 'Gratis']);
+  if (carta.pedidos.minimo) filas.push(['Pedido mínimo', precioTexto(carta.pedidos.minimo)]);
+  return `<dl class="t-hechos">${filas.map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl>`;
 }
 
 const avisoViejo = (carta) => (carta.vieja ? '<p class="t-aviso">Estos precios son de la última vez que cargó nuestra carta. Confirma el precio al pedir.</p>' : '');
 
+const todos = (carta) => carta.secciones.flatMap((s) => s.productos.map((p) => ({ p, s })));
+
+// La promoción de la portada: la de mayor descuento; si no hay, lo destacado.
+function productoPortada(carta) {
+  const lista = todos(carta).filter(({ p }) => p.disponible);
+  const promos = lista.filter(({ p }) => p.antes).sort((a, b) => b.p.antes / b.p.precio - a.p.antes / a.p.precio);
+  if (promos.length) return { ...promos[0], promo: true };
+  const destacado = lista.find(({ p }) => p.destacado && p.imagen);
+  return destacado ? { ...destacado, promo: false } : null;
+}
+
+// «Recomendados»: lo destacado, unas promociones y lo primero de cada categoría.
+function recomendados(carta, portada) {
+  const lista = todos(carta).filter(({ p }) => p.disponible);
+  const elegidos = [
+    ...lista.filter(({ p }) => p.destacado),
+    ...lista.filter(({ p }) => p.antes).slice(0, 3),
+    ...carta.secciones.map((s) => s.productos.find((p) => p.disponible && p.imagen) || s.productos.find((p) => p.disponible)).filter(Boolean).map((p) => ({ p })),
+    ...lista.filter(({ p }) => p.imagen),
+  ];
+  const vistos = new Set(portada ? [portada.p.id] : []);
+  return elegidos.filter(({ p }) => !vistos.has(p.id) && vistos.add(p.id)).slice(0, 6).map(({ p }) => p);
+}
+
+function bannerPortada(x, carta) {
+  const { p } = x;
+  return `<section class="t-promo" aria-labelledby="t-promo">
+  <div class="t-promo-texto">
+    <span class="t-promo-ceja">${x.promo ? 'En promoción' : 'Recomendado'}</span>
+    <h2 id="t-promo">${esc(p.nombre)} a ${precioTexto(p.precio)}</h2>
+    <p>${p.antes ? `Antes ${precioTexto(p.antes)}. ` : ''}Te lo llevamos a tu puerta en ${esc(carta.ciudad)}.</p>
+    <div class="t-promo-botones"><a class="t-boton" href="${esc(rutaProducto(p))}">Pedir ya</a><a class="t-boton t-boton-borde" href="/productos">Ver todos los productos</a></div>
+  </div>
+  ${p.imagen ? `<img class="t-promo-foto" src="${esc(p.imagen)}" alt="" width="400" height="400" fetchpriority="high" decoding="async">` : ''}
+</section>`;
+}
+
 export function paginaHtml(carta, { base }) {
   const { titulo, descripcion, enLista } = textosSeo(carta);
-  const wa = whatsappGeneral(carta);
-  const total = carta.secciones.reduce((n, s) => n + s.productos.length, 0);
   const pendientes = { fotos: 4 };
+  const portada = productoPortada(carta);
+  const reco = recomendados(carta, portada);
   const categorias = carta.secciones
-    .map(
-      (s) => `<li><a class="t-categoria" href="#${esc(s.id)}"><span class="t-ficha-cat">${s.imagen ? `<img src="${esc(s.imagen)}" alt="" width="140" height="140" loading="lazy">` : sinFoto()}</span><strong>${esc(s.nombre)}</strong><small>Ver productos</small></a></li>`,
-    )
+    .map((s) => `<li><a href="${rutaCategoria(s)}"><span class="t-cat-icono">${iconoCategoria(s.nombre)}</span><span>${esc(s.nombre)}</span></a></li>`)
     .join('');
-  const secciones = carta.secciones
+  const filas = carta.secciones
     .map(
-      (s) => `<section class="t-seccion" id="${esc(s.id)}" aria-labelledby="t-${esc(s.id)}">
-<div class="t-encabezado"><div><span class="t-ceja">Tu próximo buen momento</span><h2 id="t-${esc(s.id)}">Explora ${esc(s.nombre)}</h2></div><span class="t-cuenta">${s.productos.length} ${s.productos.length === 1 ? 'producto' : 'productos'}</span></div>
-${rejilla(s, carta, pendientes)}
+      (s) => `<section class="t-bloque" aria-labelledby="t-s-${esc(s.id)}">
+  <div class="t-bloque-cab"><h2 id="t-s-${esc(s.id)}">${esc(s.nombre)}</h2><a href="${rutaCategoria(s)}">Ver ${s.productos.length > 6 ? `los ${s.productos.length}` : 'todo'}</a></div>
+  <ul class="t-rejilla t-fila">
+${s.productos
+  .slice(0, 6)
+  .map((p) => tarjeta(p, pendientes))
+  .join('\n')}
+  </ul>
 </section>`,
     )
     .join('\n');
 
-  return `${cabeza(carta, { titulo, descripcion, canonica: `${base}/`, imagen: carta.portada, datos: ld(negocioLd(carta, base), catalogoLd(carta, base)) + datosCarrito(carta) })}
-${cabecera(carta)}
-<main class="t-hoja" id="contenido">
+  return `${cabeza(carta, { titulo, descripcion, canonica: `${base}/`, imagen: portada?.p.imagen, datos: ld(negocioLd(carta, base), catalogoLd(carta, base)) + datosPagina(carta), clase: 't-en-inicio' })}
+${cabecera(carta, { actual: 'inicio' })}
+<main class="t-principal" id="contenido">
 <div class="t-ancho">
-  <section class="t-intro">
-    <span class="t-ceja">${esc(carta.marca)} · ${esc(carta.ciudad)}</span>
-    <h1>${esc(mayuscula(enLista))} a domicilio en ${esc(carta.ciudad)}</h1>
-    ${carta.lema ? `<p>${esc(carta.lema)}</p>` : ''}
-    <ul class="t-chips">${chipsPedido(carta)}</ul>
-  </section>
-  ${wa ? `<a class="t-pregunta" href="${esc(wa)}" target="_blank" rel="noopener">${ICONOS.chat}<span><strong>¿Qué te gustaría hoy?</strong><small>Cuéntanos por WhatsApp</small></span>${ICONOS.flecha}</a>` : ''}
-
-  <section class="t-planes" id="categorias" aria-labelledby="t-planes">
-    <div class="t-encabezado"><h2 id="t-planes">Para todos tus planes</h2><span class="t-ceja">${esc(carta.marca)} Ice</span></div>
-    <ul class="t-categorias">${categorias}</ul>
-  </section>
-
-  <div class="t-filtro">
-    <p class="t-total">${total} productos</p>
-    <label class="t-buscar" hidden><span class="t-oculto">Buscar un producto</span><input type="search" placeholder="Buscar: Aguila, hielo, six pack…" autocomplete="off"></label>
-  </div>
   ${avisoViejo(carta)}
-  ${secciones}
-  <p class="t-vacio" hidden>No encontramos ese producto. ${wa ? `<a href="${esc(wa)}" target="_blank" rel="noopener">Pregúntanos por WhatsApp</a>.` : ''}</p>
-  ${pie(carta)}`;
+  <div class="t-portada">
+    <section class="t-info" aria-labelledby="t-h1">
+      <h1 id="t-h1">${esc(mayuscula(enLista))} a domicilio en ${esc(carta.ciudad)}</h1>
+      ${carta.tienda.lema ? `<p class="t-lema">${esc(carta.tienda.lema)}</p>` : ''}
+      ${hechos(carta)}
+      ${carta.pedidos.nota ? `<p class="t-info-nota">${esc(carta.pedidos.nota)}</p>` : ''}
+    </section>
+    ${portada ? bannerPortada(portada, carta) : ''}
+  </div>
+  <section class="t-bloque" aria-labelledby="t-cats">
+    <div class="t-bloque-cab"><h2 id="t-cats">¿Qué se te antoja?</h2></div>
+    <ul class="t-cats">${categorias}</ul>
+  </section>
+  ${
+    reco.length
+      ? `<section class="t-bloque" aria-labelledby="t-reco">
+    <div class="t-bloque-cab"><h2 id="t-reco">Recomendados</h2><a href="/productos">Ver todo</a></div>
+    <ul class="t-rejilla">
+${reco.map((p) => tarjeta(p, pendientes)).join('\n')}
+    </ul>
+  </section>`
+      : ''
+  }
+  ${filas}
+</div>
+</main>
+${pie(carta, 'inicio')}`;
 }
 
-// La página de un producto: foto grande, precio, cómo pedirlo y otros de su sección.
+// Las pestañas Unidad / Six pack / Caja y los filtros (los activa public/tienda.js).
+function controlesLista(productos) {
+  const grupos = [...new Set(productos.map((p) => p.grupo))].sort();
+  const pestanas =
+    grupos.length > 1
+      ? `<div class="t-pestanas" role="group" aria-label="Presentación" data-pestanas hidden><button type="button" aria-pressed="true" data-grupo="">Todo</button>${grupos
+          .map((g) => `<button type="button" aria-pressed="false" data-grupo="${g}">${GRUPO_CORTO[g]}</button>`)
+          .join('')}</div>`
+      : '';
+  const oferta = productos.some((p) => p.antes) ? '<button type="button" aria-pressed="false" data-solo-oferta>En oferta</button>' : '';
+  return `${pestanas}<div class="t-filtros" data-filtros hidden><button type="button" aria-pressed="false" data-orden-precio>Menor precio</button>${oferta}</div>`;
+}
+
+// Una sección como lista; si mezcla unidades, six pack y cajas, por grupos.
+function listaSeccion(productos, pendientes, nivel) {
+  const grupos = [...new Set(productos.map((p) => p.grupo))].sort();
+  if (grupos.length < 2) return `<ul class="t-lista">\n${productos.map((p) => tarjeta(p, pendientes, nivel)).join('\n')}\n</ul>`;
+  return grupos
+    .map((g) => {
+      const delGrupo = productos.filter((p) => p.grupo === g);
+      return `<div class="t-grupo" data-grupo-lista="${g}">
+<h${nivel - 1 < 2 ? 2 : nivel - 1} class="t-subgrupo">${GRUPOS[g]} <span>${delGrupo.length}</span></h${nivel - 1 < 2 ? 2 : nivel - 1}>
+<ul class="t-lista">
+${delGrupo.map((p) => tarjeta(p, pendientes, nivel)).join('\n')}
+</ul>
+</div>`;
+    })
+    .join('\n');
+}
+
+const migasHtml = (pasos) =>
+  `<nav class="t-migas" aria-label="Estás en"><ol>${pasos
+    .map(([texto, ruta], i) => (i === pasos.length - 1 ? `<li aria-current="page">${esc(texto)}</li>` : `<li><a href="${esc(ruta)}">${esc(texto)}</a></li>`))
+    .join('')}</ol></nav>`;
+
+// Busca con todas las palabras en el nombre o la categoría, sin tildes.
+export function filtrarCarta(carta, buscar) {
+  const palabras = sinTildes(buscar).split(/\s+/).filter(Boolean);
+  if (!palabras.length) return carta.secciones;
+  return carta.secciones
+    .map((s) => ({ ...s, productos: s.productos.filter((p) => palabras.every((w) => sinTildes(`${p.nombre} ${s.nombre}`).includes(w))) }))
+    .filter((s) => s.productos.length);
+}
+
+// Una categoría («/categoria/cervezas») o todos los productos («/productos»,
+// con «?buscar=» para el buscador sin JavaScript).
+export function paginaCategoria(carta, { base, seccion = null, buscar = '' }) {
+  const pendientes = { fotos: 4 };
+  const secciones = seccion ? [seccion] : filtrarCarta(carta, buscar);
+  const productos = secciones.flatMap((s) => s.productos);
+  const titulo = seccion ? seccion.nombre : buscar ? `Resultados para «${buscar}»` : 'Todos los productos';
+  const ruta = seccion ? rutaCategoria(seccion) : '/productos';
+  const tituloSeo = seccion ? `${seccion.nombre} a domicilio en ${carta.ciudad} | ${carta.marca}` : `Productos a domicilio en ${carta.ciudad} | ${carta.marca}`;
+  const descripcion = seccion
+    ? `${seccion.nombre} a domicilio en ${carta.ciudad}: ${seccion.productos
+        .slice(0, 4)
+        .map((p) => p.nombre)
+        .join(', ')} y más. Precios al día y pedido en línea en ${carta.marca}.`
+    : `Todos los productos de ${carta.marca} con precios al día y domicilio en ${carta.ciudad}.`;
+  const wa = whatsappGeneral(carta);
+  const contenido = seccion
+    ? listaSeccion(productos, pendientes, 3)
+    : secciones
+        .map(
+          (s) => `<section class="t-bloque" id="${esc(s.id)}" aria-labelledby="t-s-${esc(s.id)}" data-seccion>
+  <div class="t-bloque-cab"><h2 id="t-s-${esc(s.id)}">${esc(s.nombre)}</h2><a href="${rutaCategoria(s)}">Solo ${esc(s.nombre.toLowerCase())}</a></div>
+  ${listaSeccion(s.productos, pendientes, 4)}
+</section>`,
+        )
+        .join('\n');
+  return `${cabeza(carta, {
+    titulo: tituloSeo,
+    descripcion,
+    canonica: buscar ? null : `${base}${ruta}`,
+    robots: buscar ? 'noindex, follow' : undefined,
+    datos: ld(catalogoLd(carta, base, secciones), migasLd(base, [['Inicio', `${base}/`], [seccion ? seccion.nombre : 'Productos', `${base}${ruta}`]])) + datosPagina(carta),
+    clase: 't-en-lista',
+  })}
+${cabecera(carta, { actual: seccion ? seccion.id : 'productos', buscar })}
+<main class="t-principal" id="contenido">
+<div class="t-ancho">
+  ${migasHtml([['Inicio', '/'], [seccion ? seccion.nombre : 'Productos', ruta]])}
+  ${avisoViejo(carta)}
+  <div class="t-titulo"><h1>${esc(titulo)}</h1><p>${productos.length} ${productos.length === 1 ? 'producto' : 'productos'} · ${esc(carta.marca)}</p></div>
+  ${productos.length ? controlesLista(productos) : ''}
+  ${contenido}
+  <p class="t-vacio" data-vacio${productos.length ? ' hidden' : ''}>No encontramos ese producto. ${wa ? `<a href="${esc(wa)}" target="_blank" rel="noopener">Pregúntanos por WhatsApp</a>.` : ''}</p>
+</div>
+</main>
+${pie(carta, 'productos')}`;
+}
+
+// La lata, el six pack y la caja de la misma cerveza, para pasar de una a otra.
+function hermanos(p, seccion) {
+  const f = familia(p.nombre);
+  const lista = seccion.productos.filter((x) => familia(x.nombre) === f);
+  return new Set(lista.map((x) => x.grupo)).size > 1 ? lista : [];
+}
+
+const unidadesDe = (p) => (p.grupo === 1 ? 6 : p.grupo === 2 ? Number(p.nombre.match(/x\s*(\d+)\s*unidades/i)?.[1]) || null : 1);
+
+// «En caja ahorras $4.800 frente a 24 sueltas»: solo si de verdad sale más barato.
+function textoAhorro(p, lista) {
+  const sueltas = lista.filter((x) => x.grupo === 0);
+  if (!sueltas.length) return '';
+  const unidad = Math.min(...sueltas.map((x) => x.precio));
+  const ahorro = (x) => (unidadesDe(x) ? unidad * unidadesDe(x) - x.precio : 0);
+  const candidatos = p.grupo > 0 ? [p] : lista.filter((x) => x.grupo > 0);
+  const mejor = candidatos.filter((x) => ahorro(x) > 0).sort((a, b) => ahorro(b) - ahorro(a))[0];
+  if (!mejor) return '';
+  const nombre = GRUPO_CORTO[mejor.grupo].toLowerCase();
+  return `${mejor === p ? `En ${nombre}` : `Llevando el ${nombre}`.replace('el caja', 'la caja')} ahorras ${precioTexto(ahorro(mejor))} frente a ${unidadesDe(mejor)} sueltas.`;
+}
+
+// «Va bien con»: lo primero de otras categorías (el hielo primero).
+function acompanantes(carta, seccion) {
+  const otras = carta.secciones.filter((s) => s !== seccion).sort((a, b) => /hielo/i.test(b.nombre) - /hielo/i.test(a.nombre));
+  return otras
+    .map((s) => s.productos.find((p) => p.disponible && p.imagen) || s.productos.find((p) => p.disponible))
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+// Las opciones de TRIVO (variantes): si son frío / al clima, es la temperatura.
+const leyendaVariantes = (p, conHermanos) =>
+  p.variantes.every((v) => /^(fr[ií]a|caliente|al clima|natural|helada)$/i.test(v.nombre)) ? 'Temperatura' : conHermanos ? 'Opciones' : 'Presentación';
+
+// La página de un producto: foto, precio, presentación, cantidad y «Agregar».
 export function paginaProducto(carta, p, seccion, { base }) {
   const url = `${base}${rutaProducto(p)}`;
-  // Primero los de la misma presentación (otras latas, otros six pack…), con foto.
+  const familiares = hermanos(p, seccion);
+  const ahorro = familiares.length ? textoAhorro(p, familiares) : '';
   const otros = seccion.productos
-    .filter((x) => x.id !== p.id)
+    .filter((x) => x.id !== p.id && !familiares.includes(x))
     .sort((a, b) => (a.grupo === p.grupo ? 0 : 1) - (b.grupo === p.grupo ? 0 : 1) || Boolean(b.imagen) - Boolean(a.imagen))
     .slice(0, 8);
+  const junto = acompanantes(carta, seccion);
   const duda = enlaceWhatsapp(carta.whatsapp, `Hola ${carta.marca}, tengo una pregunta sobre ${p.nombre}.`);
+  const pedirWa = enlaceWhatsapp(carta.whatsapp, `Hola ${carta.marca}, quiero pedir ${p.nombre} a domicilio en ${carta.ciudad}.`);
   const pendientes = { fotos: 0 };
+  const opcionesHermanos = familiares.length
+    ? `<fieldset class="t-opciones">
+      <legend>Presentación</legend>
+      <div>${familiares
+        .map(
+          (x) =>
+            `<a class="t-opcion" href="${esc(rutaProducto(x))}"${x.id === p.id ? ' aria-current="page"' : ''}><span>${esc(familiares.filter((y) => y.grupo === x.grupo).length > 1 ? x.nombre : GRUPO_CORTO[x.grupo])}</span><b>${precioTexto(x.precio)}</b></a>`,
+        )
+        .join('')}</div>
+      ${ahorro ? `<p class="t-ahorro">${esc(ahorro)}</p>` : ''}
+    </fieldset>`
+    : '';
+  const opcionesVariantes =
+    p.disponible && p.variantes.length > 1
+      ? `<fieldset class="t-opciones">
+      <legend>${leyendaVariantes(p, Boolean(familiares.length))}</legend>
+      <div>${p.variantes
+        .map(
+          (v, i) =>
+            `<label class="t-opcion"><input type="radio" name="presentacion" value="${esc(v.id)}" data-precio="${esc(v.precio)}"${i === 0 ? ' checked' : ''}><span>${esc(v.nombre)}</span><b>${precioTexto(v.precio)}</b></label>`,
+        )
+        .join('')}</div>
+    </fieldset>`
+      : '';
+  const comprar = p.disponible
+    ? `<div class="t-ficha-comprar" data-producto="${esc(p.id)}"><a class="t-boton t-grande" href="${esc(pedirWa || rutaProducto(p))}" data-agregar="${esc(p.id)}" data-texto="Agregar"><span>Agregar al pedido</span></a></div>`
+    : '<p class="t-ficha-agotado">Agotado por ahora</p>';
+
   return `${cabeza(carta, {
     titulo: `${p.nombre} a domicilio en ${carta.ciudad} | ${carta.marca}`,
     descripcion: descripcionProducto(p, carta),
     canonica: url,
-    imagen: p.imagen || carta.portada,
+    imagen: p.imagen,
     tipo: 'product',
-    datos: ld(...productoLd(p, seccion, carta, base)) + datosCarrito(carta),
+    datos: ld(...productoLd(p, seccion, carta, base)) + datosPagina(carta),
+    clase: 't-en-producto',
   })}
-${cabecera(carta)}
-<main class="t-hoja" id="contenido">
+${cabecera(carta, { actual: seccion.id })}
+<main class="t-principal" id="contenido">
 <div class="t-ancho">
-  <nav class="t-migas" aria-label="Estás en">
-    <ol><li><a href="/">Inicio</a></li><li><a href="/#${esc(seccion.id)}">${esc(seccion.nombre)}</a></li><li aria-current="page">${esc(p.nombre)}</li></ol>
-  </nav>
+  ${migasHtml([['Inicio', '/'], [seccion.nombre, rutaCategoria(seccion)], [p.nombre, rutaProducto(p)]])}
   ${avisoViejo(carta)}
   <article class="t-ficha${p.disponible ? '' : ' t-no'}">
-    <figure class="t-arte t-ficha-arte"><span class="t-etiqueta">${esc(seccion.nombre)}</span>${p.imagen ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" width="800" height="800" fetchpriority="high">` : sinFoto()}</figure>
+    <figure class="t-ficha-foto">${p.imagen ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" width="800" height="800" fetchpriority="high">` : sinFoto()}${p.antes ? '<span class="t-sello">Oferta</span>' : ''}</figure>
     <div class="t-ficha-info">
-      <span class="t-ceja">${esc(seccion.nombre)}</span>
+      <p class="t-ceja"><a href="${rutaCategoria(seccion)}">${esc(seccion.nombre)}</a>${p.grupo || familiares.length ? ` · ${GRUPO_CORTO[p.grupo]}` : ''}</p>
       <h1>${esc(p.nombre)}</h1>
-      <p class="t-precio t-ficha-precio">${precioHtml(p)}</p>
-      <p class="t-ficha-estado">${p.disponible ? `Disponible · domicilio en ${esc(carta.ciudad)}` : 'Agotado por ahora'}</p>
+      <p class="t-ficha-precio">${p.desde ? '<small>Desde</small>' : ''}<strong data-precio>${precioTexto(p.precio)}</strong>${p.antes ? `<del>${precioTexto(p.antes)}</del><span class="t-sello">Oferta</span>` : ''}</p>
       ${p.descripcion ? `<p class="t-ficha-desc">${esc(p.descripcion)}</p>` : ''}
-      ${p.disponible ? escogerVariante(p) : ''}
-      <div class="t-ficha-botones" data-producto="${esc(p.id)}">${botonesCompra(p, true)}</div>
+      ${opcionesHermanos}
+      ${opcionesVariantes}
+      ${comprar}
+      <section class="t-entrega-info" aria-label="Entrega">
+        ${ICONOS.camion}
+        <p><strong>${carta.tienda.tiempo ? `Llega en ${esc(carta.tienda.tiempo)}` : `Domicilio en ${esc(carta.ciudad)}`}</strong><span>${carta.envio ? `Domicilio ${precioTexto(carta.envio)}` : 'El domicilio se calcula con tu dirección'}${carta.pedidos.minimo ? ` · pedido mínimo ${precioTexto(carta.pedidos.minimo)}` : ''}.</span></p>
+      </section>
       ${duda ? `<p class="t-duda">¿Tienes dudas? <a href="${esc(duda)}" target="_blank" rel="noopener">Pregúntanos por WhatsApp</a></p>` : ''}
-      <ul class="t-chips">${chipsPedido(carta)}</ul>
     </div>
   </article>
   ${
-    otros.length
-      ? `<section class="t-seccion" aria-labelledby="t-otros">
-<div class="t-encabezado"><div><span class="t-ceja">Tu próximo buen momento</span><h2 id="t-otros">Más de ${esc(seccion.nombre.toLowerCase())}</h2></div><a class="t-ver-todo" href="/#${esc(seccion.id)}">Ver todo ${ICONOS.flecha}</a></div>
-<ul class="t-rejilla">
-${otros.map((x) => tarjeta(x, seccion, carta, pendientes)).join('\n')}
-</ul>
+    junto.length
+      ? `<section class="t-bloque" aria-labelledby="t-junto">
+  <div class="t-bloque-cab"><h2 id="t-junto">Va bien con</h2></div>
+  <ul class="t-rejilla t-fila">
+${junto.map((x) => tarjeta(x, pendientes)).join('\n')}
+  </ul>
 </section>`
       : ''
   }
-  ${pie(carta)}`;
+  ${
+    otros.length
+      ? `<section class="t-bloque" aria-labelledby="t-otros">
+  <div class="t-bloque-cab"><h2 id="t-otros">Más de ${esc(seccion.nombre.toLowerCase())}</h2><a href="${rutaCategoria(seccion)}">Ver todo</a></div>
+  <ul class="t-rejilla t-fila">
+${otros.map((x) => tarjeta(x, pendientes)).join('\n')}
+  </ul>
+</section>`
+      : ''
+  }
+</div>
+</main>
+${pie(carta, 'productos')}`;
 }
 
-function paginaNoEsta(carta) {
-  return `${cabeza(carta, { titulo: `Producto no disponible | ${carta.marca}`, descripcion: `Este producto ya no está en la carta de ${carta.marca}.`, robots: 'noindex' })}
+function paginaNoEsta(carta, que = 'Este producto') {
+  return `${cabeza(carta, { titulo: `No disponible | ${carta.marca}`, descripcion: `${que} ya no está en la carta de ${carta.marca}.`, robots: 'noindex' })}
 ${cabecera(carta)}
-<main class="t-hoja" id="contenido">
+<main class="t-principal" id="contenido">
 <div class="t-ancho">
-  <section class="t-caida"><h1>Este producto ya no está en la carta</h1><p>Mira lo que tenemos hoy.</p><p><a class="t-comprar t-grande" href="/#categorias">Ver todos los productos</a></p></section>
-  ${pie(carta)}`;
+  <section class="t-caida"><h1>${esc(que)} ya no está en la carta</h1><p>Mira lo que tenemos hoy.</p><p><a class="t-boton t-grande" href="/productos">Ver todos los productos</a></p></section>
+</div>
+</main>
+${pie(carta, '')}`;
 }
 
-// Cuando la carta no se pudo leer nunca: una página corta que manda a TRIVO.
-function paginaSinCarta() {
+// Cuando la carta no se pudo leer nunca: una página corta.
+function paginaSinCarta(marca) {
   return `<!doctype html>
 <html lang="es-CO"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agua Pure · Valledupar</title><meta name="robots" content="noindex"><link rel="stylesheet" href="/tienda.css"><script src="/tienda.js" type="module"></script></head>
-<body><main class="t-ancho t-caida"><h1>Agua Pure</h1><p>La carta no cargó en este momento.</p><p><a class="t-comprar t-grande" href="${CARTA}">Ver la carta y pedir</a></p></main></body></html>`;
+<title>${esc(marca.nombre)}</title><meta name="robots" content="noindex"><link rel="stylesheet" href="/tienda.css"><link rel="stylesheet" href="/marca.css"></head>
+<body><main class="t-ancho t-caida"><h1>${esc(marca.nombre)}</h1><p>La tienda no cargó en este momento. Intenta de nuevo en unos minutos.</p></main></body></html>`;
 }
 
 function mapaDelSitio(carta, base) {
   const fecha = new Date(carta?.t || Date.now()).toISOString().slice(0, 10);
-  const urls = [`  <url><loc>${esc(base)}/</loc><lastmod>${fecha}</lastmod></url>`];
-  for (const p of carta?.secciones.flatMap((s) => s.productos) || []) {
-    urls.push(
-      `  <url><loc>${esc(base + rutaProducto(p))}</loc><lastmod>${fecha}</lastmod>${p.imagen ? `<image:image><image:loc>${esc(p.imagen)}</image:loc></image:image>` : ''}</url>`,
-    );
+  const url = (ruta, extra = '') => `  <url><loc>${esc(base + ruta)}</loc><lastmod>${fecha}</lastmod>${extra}</url>`;
+  const urls = [url('/')];
+  if (carta) {
+    urls.push(url('/productos'));
+    for (const s of carta.secciones) urls.push(url(rutaCategoria(s)));
+    for (const p of carta.secciones.flatMap((s) => s.productos)) {
+      urls.push(url(rutaProducto(p), p.imagen ? `<image:image><image:loc>${esc(p.imagen)}</image:loc></image:image>` : ''));
+    }
   }
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
@@ -643,7 +972,7 @@ const HTML = { ...SEGURIDAD, ...CACHE, 'content-type': 'text/html; charset=utf-8
 
 const baseDe = (request) => (process.env.URL || new URL(request.url).origin).replace(/\/$/, '');
 
-export async function responderTienda(request) {
+export async function responderTienda(request, { ahora = Date.now() } = {}) {
   const url = new URL(request.url);
   const base = baseDe(request);
   if (url.pathname === '/robots.txt') {
@@ -651,16 +980,24 @@ export async function responderTienda(request) {
       headers: { ...SEGURIDAD, ...CACHE, 'content-type': 'text/plain; charset=utf-8' },
     });
   }
-  const carta = await cargarCarta();
+  const marca = await leerMarca();
+  if (url.pathname === '/marca.css') return new Response(marcaCss(marca), { headers: { ...SEGURIDAD, ...CACHE, 'content-type': 'text/css; charset=utf-8' } });
+  if (url.pathname === '/marca.svg') return new Response(marcaSvg(marca), { headers: { ...SEGURIDAD, ...CACHE, 'content-type': 'image/svg+xml; charset=utf-8' } });
+
+  const leida = await cargarCarta();
   if (url.pathname === '/sitemap.xml') {
-    return new Response(mapaDelSitio(carta, base), { headers: { ...SEGURIDAD, ...CACHE, 'content-type': 'application/xml; charset=utf-8' } });
+    return new Response(mapaDelSitio(leida, base), { headers: { ...SEGURIDAD, ...CACHE, 'content-type': 'application/xml; charset=utf-8' } });
   }
-  if (!carta) {
-    return new Response(paginaSinCarta(), {
+  if (!leida) {
+    return new Response(paginaSinCarta(marca), {
       status: 503,
       headers: { ...SEGURIDAD, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'retry-after': '300' },
     });
   }
+  // La tienda lleva el nombre del distribuidor, no el de la carta de TRIVO.
+  const envio = await domicilioBase({ sucursal: leida.sucursal || 'B001', ciudad: leida.ciudad });
+  const carta = { ...leida, marca: marca.nombre, lema: marca.lema, tienda: marca, envio, ahora };
+
   if (url.pathname.startsWith('/producto/')) {
     const id = url.pathname.match(/-(\d+)\/?$/)?.[1];
     const hallado = id ? buscarProducto(carta, id) : null;
@@ -670,10 +1007,24 @@ export async function responderTienda(request) {
     if (url.pathname !== ruta) return new Response(null, { status: 301, headers: { ...SEGURIDAD, ...CACHE, location: `${base}${ruta}` } });
     return new Response(paginaProducto(carta, hallado.p, hallado.seccion, { base }), { headers: HTML });
   }
+  if (url.pathname.startsWith('/categoria/')) {
+    const id = url.pathname.slice('/categoria/'.length).replace(/\/$/, '');
+    const seccion = carta.secciones.find((s) => s.id === id);
+    if (!seccion) return new Response(paginaNoEsta(carta, 'Esta categoría'), { status: 404, headers: HTML });
+    return new Response(paginaCategoria(carta, { base, seccion }), { headers: HTML });
+  }
+  if (url.pathname === '/productos' || url.pathname === '/productos/') {
+    const buscar = String(url.searchParams.get('buscar') || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 60);
+    return new Response(paginaCategoria(carta, { base, buscar }), { headers: HTML });
+  }
   return new Response(paginaHtml(carta, { base }), { headers: HTML });
 }
 
 // Para las pruebas.
 export function olvidarMemoria() {
   enMemoria = null;
+  envioEnMemoria = null;
 }

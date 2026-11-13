@@ -3,6 +3,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { actualizar, enBlobs, leer } from './almacen.js';
 import { manejarCaja } from './caja.js';
+import { guardarMarca, leerMarca } from './marca.js';
 import { catalogoTiendas, comparar, estadoTiendas } from './comparador.js';
 import { guardarAjustesCompartidos, guardarConfig, leerAjustesCompartidos, leerConfig } from './config.js';
 import { borrarMovimiento, leerMovimientos, registrarMovimiento } from './inventario.js';
@@ -221,6 +222,12 @@ export async function manejarApi(request, { ip = '', https = false } = {}) {
     if (ruta === '/api/config' && metodo === 'GET') return json(200, { config: await leerConfig() });
     if (ruta === '/api/config' && metodo === 'PUT') {
       return validar(async () => json(200, { config: await guardarConfig((await leerJson(request)).config || {}) }));
+    }
+
+    // La marca de la tienda pública: nombre, iniciales, color y tiempo de entrega.
+    if (ruta === '/api/tienda-marca' && metodo === 'GET') return json(200, { marca: await leerMarca() });
+    if (ruta === '/api/tienda-marca' && metodo === 'PUT') {
+      return validar(async () => json(200, { marca: await guardarMarca((await leerJson(request)).marca || {}) }));
     }
 
     // Copia compartida de los ajustes del navegador.

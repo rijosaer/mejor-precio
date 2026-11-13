@@ -9,6 +9,38 @@ import { $, boton, el, guardado } from './util.js';
 
 export const VERSIONES = [
   {
+    version: '3.0',
+    fecha: '2026-11-13',
+    titulo: 'La tienda, versión 2: con el nombre y el color de quien vende',
+    cambios: [
+      {
+        titulo: 'La tienda es de quien vende',
+        antes: 'La tienda mostraba el nombre, el logo y los enlaces de la carta de TRIVO.',
+        ahora: 'Sale el nombre, las iniciales y el color que se pongan en Ajustes → Tienda en línea, sin nombrar a TRIVO ni a nadie más. Se puede poner también el tiempo de entrega y una frase corta.',
+      },
+      {
+        titulo: 'Inicio nuevo',
+        antes: 'Una sola página larga con todos los productos.',
+        ahora: 'Arriba si la tienda está abierta (y hasta qué hora), a dónde se entrega y el buscador; luego el domicilio y el pedido mínimo, la promoción con más descuento, las categorías, recomendados y una fila por categoría.',
+      },
+      {
+        titulo: 'Categorías y buscador',
+        antes: 'Las categorías eran secciones de la misma página y el buscador solo ocultaba tarjetas.',
+        ahora: 'Cada categoría tiene su página con pestañas Unidad / Six pack / Caja, «Menor precio» y «En oferta». El buscador muestra resultados al instante en cualquier página y hay una página con todos los productos.',
+      },
+      {
+        titulo: 'Producto',
+        antes: 'Solo las presentaciones de TRIVO (caliente o fría).',
+        ahora: 'También se pasa de la lata al six pack o a la caja de la misma cerveza, se escoge la cantidad junto a «Agregar · $precio» y se ven sugerencias que van bien con el producto.',
+      },
+      {
+        titulo: 'Tu pedido y seguimiento',
+        antes: 'El pedido iba en dos pasos y el seguimiento era una lista corta.',
+        ahora: 'Productos, entrega, pago y total en una sola hoja (con los datos de la vez pasada y «Cambiar»). «Mis pedidos» muestra el estado paso a paso con la hora, el detalle y un botón para escribirle a la tienda. Sin mapa: la tienda no comparte dónde va el domiciliario.',
+      },
+    ],
+  },
+  {
     version: '2.8',
     fecha: '2026-11-09',
     titulo: 'El pedido se hace en la tienda y entra a TRIVO',

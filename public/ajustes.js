@@ -343,6 +343,44 @@ async function guardarMonitoreo(activas) {
   guardado('mp-config', r.config);
 }
 
+// ── Tienda en línea: nombre, iniciales, color y tiempo de entrega ───────────
+async function pintarMarca() {
+  $('#aj-t-listo').textContent = '';
+  try {
+    const { marca } = await api('/api/tienda-marca');
+    $('#aj-t-nombre').value = marca.nombre;
+    $('#aj-t-sigla').value = marca.sigla;
+    $('#aj-t-color').value = marca.color.toLowerCase();
+    $('#aj-t-tiempo').value = marca.tiempo;
+    $('#aj-t-lema').value = marca.lema;
+  } catch (error) {
+    $('#aj-t-listo').textContent = `No se pudo leer la tienda: ${error.message}`;
+  }
+}
+
+async function guardarMarca() {
+  const listo = $('#aj-t-listo');
+  listo.textContent = 'Guardando…';
+  try {
+    const { marca } = await api('/api/tienda-marca', {
+      method: 'PUT',
+      cuerpo: {
+        marca: {
+          nombre: $('#aj-t-nombre').value,
+          sigla: $('#aj-t-sigla').value,
+          color: $('#aj-t-color').value,
+          tiempo: $('#aj-t-tiempo').value,
+          lema: $('#aj-t-lema').value,
+        },
+      },
+    });
+    $('#aj-t-sigla').value = marca.sigla;
+    listo.textContent = `Guardado: la tienda se ve como «${marca.nombre}». En unos minutos sale así para todos.`;
+  } catch (error) {
+    listo.textContent = `No se pudo guardar: ${error.message}`;
+  }
+}
+
 // ── Abrir y guardar ────────────────────────────────────────────────────────
 export async function abrirAjustes() {
   const a = ajustes();
@@ -385,6 +423,7 @@ export async function abrirAjustes() {
   acciones.mostrar('ajustes');
   pintarPush();
   pintarWhatsapp();
+  pintarMarca();
 }
 
 async function guardarPanelAjustes() {
@@ -432,6 +471,7 @@ async function guardarPanelAjustes() {
 
 export function configurarAjustes() {
   $('#aj-guardar').addEventListener('click', guardarPanelAjustes);
+  $('#aj-t-guardar').addEventListener('click', guardarMarca);
   $('#aj-volver').addEventListener('click', () => acciones.volver());
   $('#aj-log-origen').addEventListener('input', pintarResumenLogistica);
   $('#aj-log-porkm').addEventListener('input', pintarResumenLogistica);
